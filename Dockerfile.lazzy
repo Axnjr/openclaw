@@ -10,6 +10,9 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ui/package.json ./ui/package.json
+COPY clawhub/package.json ./clawhub/package.json
+COPY clawhub/packages/clawdhub/package.json ./clawhub/packages/clawdhub/package.json
+COPY clawhub/packages/schema/package.json ./clawhub/packages/schema/package.json
 COPY patches ./patches
 COPY scripts ./scripts
 
@@ -21,12 +24,21 @@ RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
+# Build clawhub CLI
+WORKDIR /app/clawhub
+RUN bun install
+RUN bun run build
+WORKDIR /app
+
+# Expose clawdhub CLI globally
+RUN ln -s /app/clawhub/packages/clawdhub/bin/clawdhub.js /usr/local/bin/clawdhub
+RUN chmod +x /app/clawhub/packages/clawdhub/bin/clawdhub.js
+
 ENV NODE_ENV=production
 
 # Set default Railway/Lazzy environment variables
 ENV OPENCLAW_STATE_DIR=/app/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/app/workspace
-ENV PORT=8080
 
 # Allow non-root user to write temp files during runtime/tests.
 RUN chown -R node:node /app
@@ -35,5 +47,6 @@ RUN chown -R node:node /app
 USER node
 
 # Start gateway server with default config.
+# Runs the bootstrap script first to map OPENCLAW_MODEL -> openclaw.json
 # Binds to 0.0.0.0 (lan) for Railway proxy accessibility.
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
+CMD ["sh", "-c", "node scripts/lazzy-bootstrap.js && node openclaw.mjs gateway --allow-unconfigured --bind lan"]
