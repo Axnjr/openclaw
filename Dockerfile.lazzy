@@ -27,6 +27,7 @@ RUN pnpm ui:build
 # Build clawhub CLI
 WORKDIR /app/clawhub
 RUN bun install
+RUN cd packages/schema && bun run build
 RUN bun run build
 WORKDIR /app
 
