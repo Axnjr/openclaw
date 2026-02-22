@@ -10,9 +10,6 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY ui/package.json ./ui/package.json
-COPY clawhub/package.json ./clawhub/package.json
-COPY clawhub/packages/clawdhub/package.json ./clawhub/packages/clawdhub/package.json
-COPY clawhub/packages/schema/package.json ./clawhub/packages/schema/package.json
 COPY patches ./patches
 COPY scripts ./scripts
 
@@ -23,17 +20,6 @@ RUN pnpm build
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
-
-# Build clawhub CLI
-WORKDIR /app/clawhub
-RUN bun install
-RUN cd packages/schema && bun run build
-RUN bun run build
-WORKDIR /app
-
-# Expose clawdhub CLI globally
-RUN ln -s /app/clawhub/packages/clawdhub/bin/clawdhub.js /usr/local/bin/clawdhub
-RUN chmod +x /app/clawhub/packages/clawdhub/bin/clawdhub.js
 
 ENV NODE_ENV=production
 
