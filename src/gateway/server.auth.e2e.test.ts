@@ -687,6 +687,56 @@ describe("gateway server auth/connect", () => {
     });
   });
 
+  test("keeps iOS scopes without device when native bypass is explicitly enabled", async () => {
+    testState.gatewayControlUi = { dangerouslyDisableDeviceAuth: true };
+    const { server, ws, prevToken } = await startServerWithClient("secret");
+    try {
+      const res = await connectReq(ws, {
+        token: "secret",
+        device: null,
+        scopes: ["operator.read", "operator.write"],
+        client: {
+          id: GATEWAY_CLIENT_NAMES.IOS_APP,
+          version: "1.0.0",
+          platform: "ios",
+          mode: GATEWAY_CLIENT_MODES.UI,
+        },
+      });
+      expect(res.ok).toBe(true);
+      const health = await rpcReq(ws, "health");
+      expect(health.ok).toBe(true);
+    } finally {
+      ws.close();
+      await server.close();
+      restoreGatewayToken(prevToken);
+    }
+  });
+
+  test("strips iOS scopes without device when native bypass is not enabled", async () => {
+    const { server, ws, prevToken } = await startServerWithClient("secret");
+    try {
+      const res = await connectReq(ws, {
+        token: "secret",
+        device: null,
+        scopes: ["operator.read", "operator.write"],
+        client: {
+          id: GATEWAY_CLIENT_NAMES.IOS_APP,
+          version: "1.0.0",
+          platform: "ios",
+          mode: GATEWAY_CLIENT_MODES.UI,
+        },
+      });
+      expect(res.ok).toBe(true);
+      const health = await rpcReq(ws, "health");
+      expect(health.ok).toBe(false);
+      expect(health.error?.message).toContain("missing scope");
+    } finally {
+      ws.close();
+      await server.close();
+      restoreGatewayToken(prevToken);
+    }
+  });
+
   test("allows control ui without device identity when insecure auth is enabled", async () => {
     testState.gatewayControlUi = { allowInsecureAuth: true };
     const { server, ws, prevToken } = await startServerWithClient("secret", {
