@@ -320,6 +320,8 @@ async function sendApnsRequest(params: {
   const body = JSON.stringify(params.payload);
   const requestPath = `/3/device/${params.token}`;
 
+  console.log(`[push-apns] Connecting to APNs authority: ${authority}`);
+
   return await new Promise((resolve, reject) => {
     const client = http2.connect(authority);
     let settled = false;
@@ -329,6 +331,7 @@ async function sendApnsRequest(params: {
       }
       settled = true;
       client.destroy();
+      console.error(`[push-apns] APNs connection error:`, err);
       reject(err);
     };
     const finish = (result: { status: number; apnsId?: string; body: string }) => {
@@ -337,6 +340,9 @@ async function sendApnsRequest(params: {
       }
       settled = true;
       client.close();
+      console.log(
+        `[push-apns] Finished APNs request status=${result.status} apnsId=${result.apnsId} body=${result.body}`,
+      );
       resolve(result);
     };
 
@@ -361,6 +367,7 @@ async function sendApnsRequest(params: {
     req.setEncoding("utf8");
     req.setTimeout(params.timeoutMs, () => {
       req.close(http2.constants.NGHTTP2_CANCEL);
+      console.warn(`[push-apns] APNs request timed out after ${params.timeoutMs}ms`);
       fail(new Error(`APNs request timed out after ${params.timeoutMs}ms`));
     });
     req.on("response", (headers) => {
