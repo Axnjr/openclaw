@@ -5,6 +5,8 @@ import { createInlineCodeState } from "../markdown/code-spans.js";
 import { formatAssistantErrorText } from "./pi-embedded-helpers.js";
 import { isAssistantMessage } from "./pi-embedded-utils.js";
 
+// const DEBUG_GATEWAY_CREDITS = process.env.OPENCLAW_DEBUG_CREDITS === "1";
+
 export {
   handleAutoCompactionEnd,
   handleAutoCompactionStart,
@@ -66,6 +68,12 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
   const isError = isAssistantMessage(lastAssistant) && lastAssistant.stopReason === "error";
   const endedAt = Date.now();
   const terminalData = buildTerminalLifecycleData(ctx, endedAt);
+
+  ctx.log.debug(
+    `[GatewayCredits] lifecycle_terminal_data runId=${ctx.params.runId}\n\nTERMINAL_DATA:\n${JSON.stringify(terminalData, null, 2)}`,
+  );
+  // if (DEBUG_GATEWAY_CREDITS) {
+  // }
 
   ctx.log.debug(`embedded run agent end: runId=${ctx.params.runId} isError=${isError}`);
 

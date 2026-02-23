@@ -12,6 +12,15 @@ import {
 } from "./usage-credits.js";
 import { formatForLog } from "./ws-log.js";
 
+// const DEBUG_GATEWAY_CREDITS = process.env.OPENCLAW_DEBUG_CREDITS === "1";
+
+function debugGatewayCredits(label: string, payload: Record<string, unknown>) {
+  // if (!DEBUG_GATEWAY_CREDITS) {
+  //   return;
+  // }
+  console.log(`[GatewayCredits] ${label}`, payload);
+}
+
 /**
  * Check if webchat broadcasts should be suppressed for heartbeat runs.
  * Returns true if the run is a heartbeat and showOk is false.
@@ -37,6 +46,9 @@ type JsonRecord = Record<string, unknown>;
 type TerminalUsageSnapshot = {
   usage?: JsonRecord;
   creditsUsed: number;
+  source: "explicit_credits" | "cost_derived" | "usage_fallback";
+  explicitCredits?: number;
+  costUsd?: number;
 };
 
 function asRecord(value: unknown): JsonRecord | undefined {
@@ -66,6 +78,12 @@ function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
   const creditsFromCost = costUsd !== undefined ? roundGatewayCredits(costUsd / 0.01) : undefined;
   const explicitCredits =
     parseGatewayCreditsUsed(record?.creditsUsed) ?? parseGatewayCreditsUsed(record?.credits_used);
+  const source =
+    explicitCredits !== undefined
+      ? "explicit_credits"
+      : creditsFromCost !== undefined
+        ? "cost_derived"
+        : "usage_fallback";
   const creditsUsed = explicitCredits ?? creditsFromCost ?? usageSummary.creditsUsed;
   const baseUsage = usageSummary.usage ?? asRecord(usageRaw);
   const usage = withUsageCredits(baseUsage, creditsUsed);
@@ -79,6 +97,9 @@ function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
   return {
     usage,
     creditsUsed,
+    source,
+    explicitCredits,
+    costUsd,
   };
 }
 
@@ -332,6 +353,18 @@ export function createAgentEventHandler({
       chatRunState.terminalUsageByRun.get(clientRunId);
     const creditsUsed = terminalUsage?.creditsUsed ?? 0;
     const usage = terminalUsage?.usage;
+    debugGatewayCredits("chat_final_emit", {
+      runId: clientRunId,
+      sourceRunId,
+      sessionKey,
+      jobState,
+      creditsUsed,
+      terminalSource: terminalUsage?.source ?? "none",
+      explicitCredits: terminalUsage?.explicitCredits ?? null,
+      costUsd: terminalUsage?.costUsd ?? null,
+      hasUsage: Boolean(usage),
+      hasText: Boolean(text && !shouldSuppressSilent),
+    });
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
     chatRunState.terminalUsageByRun.delete(sourceRunId);
@@ -457,6 +490,17 @@ export function createAgentEventHandler({
       const terminalUsage = resolveTerminalUsageSnapshot(evt.data);
       chatRunState.terminalUsageByRun.set(evt.runId, terminalUsage);
       chatRunState.terminalUsageByRun.set(clientRunId, terminalUsage);
+      debugGatewayCredits("lifecycle_terminal_snapshot", {
+        runId: evt.runId,
+        clientRunId,
+        sessionKey,
+        phase: lifecyclePhase,
+        creditsUsed: terminalUsage.creditsUsed,
+        source: terminalUsage.source,
+        explicitCredits: terminalUsage.explicitCredits ?? null,
+        costUsd: terminalUsage.costUsd ?? null,
+        hasUsage: Boolean(terminalUsage.usage),
+      });
     }
 
     if (sessionKey) {

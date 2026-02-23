@@ -65,6 +65,14 @@ const CHAT_HISTORY_TEXT_MAX_CHARS = 12_000;
 const CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES = 128 * 1024;
 const CHAT_HISTORY_OVERSIZED_PLACEHOLDER = "[chat.history omitted: message too large]";
 let chatHistoryPlaceholderEmitCount = 0;
+// const DEBUG_GATEWAY_CREDITS = process.env.OPENCLAW_DEBUG_CREDITS === "1";
+
+function debugGatewayCredits(label: string, payload: Record<string, unknown>) {
+  // if (!DEBUG_GATEWAY_CREDITS) {
+  //   return;
+  // }
+  console.log(`[GatewayCredits] ${label}`, payload);
+}
 
 function stripDisallowedChatControlChars(message: string): string {
   let output = "";
@@ -544,6 +552,7 @@ function broadcastChatFinal(params: {
     parseGatewayCreditsUsed(messageUsage?.credits_used);
   const fallbackCredits = parseGatewayCreditsUsed(params.creditsUsed) ?? 0;
   const creditsUsed = messageCredits ?? fallbackCredits;
+  const source = messageCredits !== undefined ? "message_usage" : "fallback";
   const usage = withUsageCredits(messageUsage, creditsUsed);
   const message = params.message
     ? usage
@@ -561,6 +570,16 @@ function broadcastChatFinal(params: {
     creditsUsed,
     credits_used: creditsUsed,
   };
+  debugGatewayCredits("chat_methods_final_emit", {
+    runId: params.runId,
+    sessionKey: params.sessionKey,
+    creditsUsed,
+    source,
+    messageCredits: messageCredits ?? null,
+    fallbackCredits,
+    hasMessage: Boolean(message),
+    hasUsage: Boolean(usage),
+  });
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
   params.context.agentRunSeq.delete(params.runId);
