@@ -119,10 +119,63 @@ describe("agent event handler", () => {
 
     const chatCalls = chatBroadcastCalls(broadcast);
     expect(chatCalls).toHaveLength(1);
-    const payload = chatCalls[0]?.[1] as { state?: string; message?: unknown };
+    const payload = chatCalls[0]?.[1] as {
+      state?: string;
+      message?: unknown;
+      usage?: { creditsUsed?: number; credits_used?: number };
+      creditsUsed?: number;
+      credits_used?: number;
+    };
     expect(payload.state).toBe("final");
     expect(payload.message).toBeUndefined();
+    expect(payload.creditsUsed).toBe(0);
+    expect(payload.credits_used).toBe(0);
+    expect(payload.usage?.creditsUsed).toBe(0);
+    expect(payload.usage?.credits_used).toBe(0);
     expect(sessionChatCalls(nodeSendToSession)).toHaveLength(1);
+    nowSpy?.mockRestore();
+  });
+
+  it("keeps top-level and usage credits on silent final payloads", () => {
+    const { broadcast, chatRunState, handler, nowSpy } = createHarness({
+      now: 2_300,
+    });
+    chatRunState.registry.add("run-credits", {
+      sessionKey: "session-credits",
+      clientRunId: "client-credits",
+    });
+
+    handler({
+      runId: "run-credits",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "NO_REPLY" },
+    });
+    handler({
+      runId: "run-credits",
+      seq: 2,
+      stream: "lifecycle",
+      ts: Date.now(),
+      data: {
+        phase: "end",
+        creditsUsed: 12.5,
+      },
+    });
+
+    const chatCalls = chatBroadcastCalls(broadcast);
+    expect(chatCalls).toHaveLength(1);
+    const payload = chatCalls[0]?.[1] as {
+      message?: unknown;
+      creditsUsed?: number;
+      credits_used?: number;
+      usage?: { creditsUsed?: number; credits_used?: number };
+    };
+    expect(payload.message).toBeUndefined();
+    expect(payload.creditsUsed).toBe(12.5);
+    expect(payload.credits_used).toBe(12.5);
+    expect(payload.usage?.creditsUsed).toBe(12.5);
+    expect(payload.usage?.credits_used).toBe(12.5);
     nowSpy?.mockRestore();
   });
 

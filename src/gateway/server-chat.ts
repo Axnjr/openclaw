@@ -65,6 +65,27 @@ function asFiniteNumber(value: unknown): number | undefined {
   return value;
 }
 
+function ensureUsageWithCredits(
+  usage: JsonRecord | undefined,
+  creditsUsed: number,
+  costUsd?: number,
+): JsonRecord {
+  const usageWithCredits =
+    withUsageCredits(usage, creditsUsed) ??
+    ({
+      creditsUsed,
+      credits_used: creditsUsed,
+    } as JsonRecord);
+  if (costUsd !== undefined && !asRecord(usageWithCredits.cost)) {
+    usageWithCredits.cost = {
+      total: costUsd,
+      totalUsd: costUsd,
+      usd: costUsd,
+    };
+  }
+  return usageWithCredits;
+}
+
 function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
   const record = asRecord(data);
   const usageRaw = record?.usage;
@@ -86,14 +107,7 @@ function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
         : "usage_fallback";
   const creditsUsed = explicitCredits ?? creditsFromCost ?? usageSummary.creditsUsed;
   const baseUsage = usageSummary.usage ?? asRecord(usageRaw);
-  const usage = withUsageCredits(baseUsage, creditsUsed);
-  if (usage && costUsd !== undefined && !asRecord(usage.cost)) {
-    usage.cost = {
-      total: costUsd,
-      totalUsd: costUsd,
-      usd: costUsd,
-    };
-  }
+  const usage = ensureUsageWithCredits(baseUsage, creditsUsed, costUsd);
   return {
     usage,
     creditsUsed,
@@ -370,7 +384,7 @@ export function createAgentEventHandler({
     chatRunState.terminalUsageByRun.delete(sourceRunId);
     chatRunState.terminalUsageByRun.delete(clientRunId);
     if (jobState === "done") {
-      const usageWithCredits = withUsageCredits(usage, creditsUsed);
+      const usageWithCredits = ensureUsageWithCredits(usage, creditsUsed, terminalUsage?.costUsd);
       const payload = {
         runId: clientRunId,
         sessionKey,

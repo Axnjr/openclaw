@@ -539,6 +539,18 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+function ensureChatFinalUsage(
+  usage: Record<string, unknown> | undefined,
+  creditsUsed: number,
+): Record<string, unknown> {
+  return (
+    withUsageCredits(usage, creditsUsed) ?? {
+      creditsUsed,
+      credits_used: creditsUsed,
+    }
+  );
+}
+
 function broadcastChatFinal(params: {
   context: Pick<GatewayRequestContext, "broadcast" | "nodeSendToSession" | "agentRunSeq">;
   runId: string;
@@ -553,12 +565,8 @@ function broadcastChatFinal(params: {
   const fallbackCredits = parseGatewayCreditsUsed(params.creditsUsed) ?? 0;
   const creditsUsed = messageCredits ?? fallbackCredits;
   const source = messageCredits !== undefined ? "message_usage" : "fallback";
-  const usage = withUsageCredits(messageUsage, creditsUsed);
-  const message = params.message
-    ? usage
-      ? { ...params.message, usage }
-      : params.message
-    : undefined;
+  const usage = ensureChatFinalUsage(messageUsage, creditsUsed);
+  const message = params.message ? { ...params.message, usage } : undefined;
   const seq = nextChatSeq({ agentRunSeq: params.context.agentRunSeq }, params.runId);
   const payload = {
     runId: params.runId,

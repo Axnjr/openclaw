@@ -1,7 +1,7 @@
+import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CURRENT_SESSION_VERSION } from "@mariozechner/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { GatewayRequestContext } from "./types.js";
 
@@ -60,6 +60,21 @@ describe("gateway chat.inject transcript writes", () => {
     const [, payload, error] = respond.mock.calls.at(-1) ?? [];
     expect(error).toBeUndefined();
     expect(payload).toMatchObject({ ok: true });
+
+    const broadcastMock = context.broadcast as unknown as ReturnType<typeof vi.fn>;
+    const finalChatCall = broadcastMock.mock.calls.find((call) => call[0] === "chat");
+    expect(finalChatCall).toBeDefined();
+    const finalPayload = finalChatCall?.[1] as {
+      state?: string;
+      creditsUsed?: number;
+      credits_used?: number;
+      usage?: { creditsUsed?: number; credits_used?: number };
+    };
+    expect(finalPayload.state).toBe("final");
+    expect(finalPayload.creditsUsed).toBe(0);
+    expect(finalPayload.credits_used).toBe(0);
+    expect(finalPayload.usage?.creditsUsed).toBe(0);
+    expect(finalPayload.usage?.credits_used).toBe(0);
 
     const lines = fs.readFileSync(transcriptPath, "utf-8").split(/\r?\n/).filter(Boolean);
     expect(lines.length).toBeGreaterThanOrEqual(2);

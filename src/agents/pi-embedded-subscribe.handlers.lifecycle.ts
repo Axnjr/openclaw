@@ -25,12 +25,17 @@ function buildTerminalLifecycleData(
     isAssistantMessage(lastAssistant) && typeof lastAssistant.model === "string"
       ? lastAssistant.model
       : undefined;
+  const lastAssistantUsage =
+    isAssistantMessage(lastAssistant) &&
+    typeof (lastAssistant as { usage?: unknown }).usage !== "undefined"
+      ? (lastAssistant as { usage?: unknown }).usage
+      : undefined;
+  const usageTotals = lastAssistantUsage === undefined ? ctx.getUsageTotals() : undefined;
+  const usageRaw = lastAssistantUsage ?? usageTotals;
+  const usageSource =
+    lastAssistantUsage !== undefined ? "last_assistant" : usageTotals ? "usage_totals" : "none";
   const usageWithCredits = resolveGatewayUsageWithCredits({
-    usageRaw:
-      isAssistantMessage(lastAssistant) &&
-      typeof (lastAssistant as { usage?: unknown }).usage !== "undefined"
-        ? (lastAssistant as { usage?: unknown }).usage
-        : undefined,
+    usageRaw,
     provider,
     model,
     config: ctx.params.config,
@@ -44,6 +49,7 @@ function buildTerminalLifecycleData(
     costUsd: usageWithCredits.costUsd,
     creditsUsed: usageWithCredits.creditsUsed,
     credits_used: usageWithCredits.creditsUsed,
+    usageSource,
   };
 }
 

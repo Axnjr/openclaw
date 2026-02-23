@@ -32,4 +32,50 @@ describe("subscribeEmbeddedPiSession lifecycle billing errors", () => {
     expect(lifecycleError).toBeDefined();
     expect(lifecycleError?.[0]?.data?.error).toContain("Anthropic (claude-3-5-sonnet)");
   });
+
+  it("falls back to usage totals when last assistant usage is missing", () => {
+    const { session, emit } = createStubSessionHarness();
+    const onAgentEvent = vi.fn();
+
+    subscribeEmbeddedPiSession({
+      session,
+      runId: "run-usage-totals-fallback",
+      onAgentEvent,
+      sessionKey: "test-session",
+    });
+
+    emit({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        provider: "openai",
+        model: "gpt-4o-mini",
+        usage: {
+          input: 120,
+          output: 40,
+          total: 160,
+        },
+      } as AssistantMessage,
+    });
+
+    emit({
+      type: "message_update",
+      message: {
+        role: "assistant",
+        provider: "openai",
+        model: "gpt-4o-mini",
+      } as AssistantMessage,
+    });
+
+    emit({ type: "agent_end" });
+
+    const lifecycleEnd = onAgentEvent.mock.calls.find(
+      (call) => call[0]?.stream === "lifecycle" && call[0]?.data?.phase === "end",
+    );
+    expect(lifecycleEnd).toBeDefined();
+    expect(lifecycleEnd?.[0]?.data?.usage?.input).toBe(120);
+    expect(lifecycleEnd?.[0]?.data?.usage?.output).toBe(40);
+    expect(lifecycleEnd?.[0]?.data?.usage?.total).toBe(160);
+    expect(lifecycleEnd?.[0]?.data?.usageSource).toBe("usage_totals");
+  });
 });
