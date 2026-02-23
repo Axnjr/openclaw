@@ -114,4 +114,5 @@ if (!fs.existsSync(stateDir)) {
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+console.log("[Bootstrap] Runtime fingerprint (post-config)", runtimeFingerprint);
 console.log("[Bootstrap] Injected proxy authorization bypass config into openclaw.json");
