@@ -218,6 +218,7 @@ export async function registerApnsToken(params: {
   }
 
   return await withLock(async () => {
+    console.log(`[push-apns] Loading registrations to save token for nodeId=${nodeId}`);
     const state = await loadRegistrationsState(params.baseDir);
     const next: ApnsRegistration = {
       nodeId,
@@ -227,7 +228,11 @@ export async function registerApnsToken(params: {
       updatedAtMs: Date.now(),
     };
     state.registrationsByNodeId[nodeId] = next;
+    console.log(`[push-apns] Persisting updated registrations for nodeId=${nodeId}`);
     await persistRegistrationsState(state, params.baseDir);
+    console.log(
+      `[push-apns] Successfully registered APNs token for nodeId=${nodeId} (env=${environment})`,
+    );
     return next;
   });
 }
