@@ -25,3 +25,13 @@ export const PushTestResultSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+export const PushRegisterParamsSchema = Type.Object(
+  {
+    nodeId: NonEmptyString,
+    token: NonEmptyString,
+    topic: NonEmptyString,
+    environment: Type.Optional(ApnsEnvironmentSchema),
+  },
+  { additionalProperties: false },
+);

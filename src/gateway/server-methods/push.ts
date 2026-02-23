@@ -1,12 +1,18 @@
+import type { GatewayRequestHandlers } from "./types.js";
 import {
   loadApnsRegistration,
   normalizeApnsEnvironment,
+  registerApnsToken,
   resolveApnsAuthConfigFromEnv,
   sendApnsAlert,
 } from "../../infra/push-apns.js";
-import { ErrorCodes, errorShape, validatePushTestParams } from "../protocol/index.js";
+import {
+  ErrorCodes,
+  errorShape,
+  validatePushRegisterParams,
+  validatePushTestParams,
+} from "../protocol/index.js";
 import { respondInvalidParams, respondUnavailableOnThrow } from "./nodes.helpers.js";
-import type { GatewayRequestHandlers } from "./types.js";
 
 function normalizeOptionalString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -17,6 +23,31 @@ function normalizeOptionalString(value: unknown): string | undefined {
 }
 
 export const pushHandlers: GatewayRequestHandlers = {
+  "push.register": async ({ params, respond, context }) => {
+    if (!validatePushRegisterParams(params)) {
+      respondInvalidParams({
+        respond,
+        method: "push.register",
+        validator: validatePushRegisterParams,
+      });
+      return;
+    }
+
+    try {
+      await registerApnsToken({
+        nodeId: params.nodeId,
+        token: params.token,
+        topic: params.topic,
+        environment: params.environment,
+      });
+      respond(true, { success: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      context.logGateway.warn(`push apns register failed node=${params.nodeId}: ${message}`);
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, message));
+    }
+  },
+
   "push.test": async ({ params, respond }) => {
     if (!validatePushTestParams(params)) {
       respondInvalidParams({

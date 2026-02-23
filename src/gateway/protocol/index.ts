@@ -160,6 +160,8 @@ import {
   type PushTestParams,
   PushTestParamsSchema,
   PushTestResultSchema,
+  type PushRegisterParams,
+  PushRegisterParamsSchema,
   type PresenceEntry,
   PresenceEntrySchema,
   ProtocolSchemas,
@@ -281,6 +283,7 @@ export const validateNodeInvokeResultParams = ajv.compile<NodeInvokeResultParams
 );
 export const validateNodeEventParams = ajv.compile<NodeEventParams>(NodeEventParamsSchema);
 export const validatePushTestParams = ajv.compile<PushTestParams>(PushTestParamsSchema);
+export const validatePushRegisterParams = ajv.compile<PushRegisterParams>(PushRegisterParamsSchema);
 export const validateSessionsListParams = ajv.compile<SessionsListParams>(SessionsListParamsSchema);
 export const validateSessionsPreviewParams = ajv.compile<SessionsPreviewParams>(
   SessionsPreviewParamsSchema,
@@ -434,6 +437,7 @@ export {
   WakeParamsSchema,
   PushTestParamsSchema,
   PushTestResultSchema,
+  PushRegisterParamsSchema,
   NodePairRequestParamsSchema,
   NodePairListParamsSchema,
   NodePairApproveParamsSchema,
@@ -530,6 +534,7 @@ export type {
   TickEvent,
   ShutdownEvent,
   WakeParams,
+  PushRegisterParams,
   NodePairRequestParams,
   NodePairListParams,
   NodePairApproveParams,

@@ -111,7 +111,11 @@ import type {
   NodePairVerifyParamsSchema,
   NodeRenameParamsSchema,
 } from "./nodes.js";
-import type { PushTestParamsSchema, PushTestResultSchema } from "./push.js";
+import type {
+  PushRegisterParamsSchema,
+  PushTestParamsSchema,
+  PushTestResultSchema,
+} from "./push.js";
 import type {
   SessionsCompactParamsSchema,
   SessionsDeleteParamsSchema,
@@ -163,6 +167,7 @@ export type NodeInvokeResultParams = Static<typeof NodeInvokeResultParamsSchema>
 export type NodeEventParams = Static<typeof NodeEventParamsSchema>;
 export type PushTestParams = Static<typeof PushTestParamsSchema>;
 export type PushTestResult = Static<typeof PushTestResultSchema>;
+export type PushRegisterParams = Static<typeof PushRegisterParamsSchema>;
 export type SessionsListParams = Static<typeof SessionsListParamsSchema>;
 export type SessionsPreviewParams = Static<typeof SessionsPreviewParamsSchema>;
 export type SessionsResolveParams = Static<typeof SessionsResolveParamsSchema>;

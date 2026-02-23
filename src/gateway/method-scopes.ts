@@ -89,6 +89,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.abort",
     "browser.request",
     "push.test",
+    "push.register",
   ],
   [ADMIN_SCOPE]: [
     "channels.logout",
