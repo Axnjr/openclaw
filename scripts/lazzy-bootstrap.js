@@ -9,7 +9,10 @@ if (fs.existsSync(configPath)) {
   try {
     config = JSON.parse(fs.readFileSync(configPath, "utf8"));
   } catch (e) {
-    console.error("[Bootstrap] Failed to parse existing openclaw.json", e);
+    console.error(
+      "[Bootstrap ================================= Bootstrap Updated Image] Failed to parse existing openclaw.json",
+      e,
+    );
   }
 }
 
@@ -41,10 +44,14 @@ function parseTrustedProxies(rawValue) {
         .map((entry) => entry.trim())
         .filter(Boolean);
     }
-    console.warn("[Bootstrap] trusted proxy JSON is not an array, falling back to CSV parsing.");
+    console.warn(
+      "[Bootstrap ================================= Bootstrap Updated Image] trusted proxy JSON is not an array, falling back to CSV parsing.",
+    );
     return parseCsv(trimmed);
   } catch {
-    console.warn("[Bootstrap] Failed to parse trusted proxy JSON, falling back to CSV parsing.");
+    console.warn(
+      "[Bootstrap ================================= Bootstrap Updated Image] Failed to parse trusted proxy JSON, falling back to CSV parsing.",
+    );
     return parseCsv(trimmed);
   }
 }
@@ -64,7 +71,9 @@ const gatewayConfig = {
 
 if (trustedProxies.length > 0) {
   gatewayConfig.trustedProxies = trustedProxies;
-  console.log(`[Bootstrap] Configured gateway.trustedProxies: ${trustedProxies.join(", ")}`);
+  console.log(
+    `[Bootstrap ================================= Bootstrap Updated Image] Configured gateway.trustedProxies: ${trustedProxies.join(", ")}`,
+  );
 }
 
 config.gateway = { ...config.gateway, ...gatewayConfig };
@@ -76,9 +85,13 @@ if (model) {
   config.agents.defaults = config.agents.defaults || {};
   config.agents.defaults.model = config.agents.defaults.model || {};
   config.agents.defaults.model.primary = model;
-  console.log(`[Bootstrap] Configured primary model to: ${model}`);
+  console.log(
+    `[Bootstrap ================================= Bootstrap Updated Image] Configured primary model to: ${model}`,
+  );
 } else {
-  console.log(`[Bootstrap] No OPENCLAW_MODEL found in environment, proceeding with defaults.`);
+  console.log(
+    `[Bootstrap ================================= Bootstrap Updated Image] No OPENCLAW_MODEL found in environment, proceeding with defaults.`,
+  );
 }
 
 if (!fs.existsSync(stateDir)) {
@@ -86,4 +99,6 @@ if (!fs.existsSync(stateDir)) {
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-console.log(`[Bootstrap] Injected proxy authorization bypass config into openclaw.json`);
+console.log(
+  `[Bootstrap ================================= Bootstrap Updated Image] Injected proxy authorization bypass config into openclaw.json`,
+);
