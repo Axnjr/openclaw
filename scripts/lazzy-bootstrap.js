@@ -39,6 +39,7 @@ const runtimeFingerprint = {
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID?.trim() || "unknown",
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
+console.log(`[Bootstrap] 🚀 Starting OpenClaw Gateway (${runtimeFingerprint.imageIdentifier})`);
 console.log("[Bootstrap] Runtime fingerprint", runtimeFingerprint);
 
 function parseTrustedProxies(rawValue) {
