@@ -75,6 +75,8 @@ export const ChatEventSchema = Type.Object(
     message: Type.Optional(Type.Unknown()),
     errorMessage: Type.Optional(Type.String()),
     usage: Type.Optional(Type.Unknown()),
+    creditsUsed: Type.Optional(Type.Number({ minimum: 0 })),
+    credits_used: Type.Optional(Type.Number({ minimum: 0 })),
     stopReason: Type.Optional(Type.String()),
   },
   { additionalProperties: false },

@@ -4,6 +4,12 @@ import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
 import { loadSessionEntry } from "./session-utils.js";
+import {
+  parseGatewayCreditsUsed,
+  resolveGatewayUsageWithCredits,
+  roundGatewayCredits,
+  withUsageCredits,
+} from "./usage-credits.js";
 import { formatForLog } from "./ws-log.js";
 
 /**
@@ -24,6 +30,56 @@ function shouldSuppressHeartbeatBroadcast(runId: string): boolean {
     // Default to suppressing if we can't load config
     return true;
   }
+}
+
+type JsonRecord = Record<string, unknown>;
+
+type TerminalUsageSnapshot = {
+  usage?: JsonRecord;
+  creditsUsed: number;
+};
+
+function asRecord(value: unknown): JsonRecord | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as JsonRecord;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
+  const record = asRecord(data);
+  const usageRaw = record?.usage;
+  const usageSummary = resolveGatewayUsageWithCredits({
+    usageRaw,
+    provider: typeof record?.provider === "string" ? record.provider : undefined,
+    model: typeof record?.model === "string" ? record.model : undefined,
+  });
+  const costUsd =
+    asFiniteNumber(record?.costUsd) ?? asFiniteNumber(record?.cost_usd) ?? usageSummary.costUsd;
+  const creditsFromCost = costUsd !== undefined ? roundGatewayCredits(costUsd / 0.01) : undefined;
+  const explicitCredits =
+    parseGatewayCreditsUsed(record?.creditsUsed) ?? parseGatewayCreditsUsed(record?.credits_used);
+  const creditsUsed = explicitCredits ?? creditsFromCost ?? usageSummary.creditsUsed;
+  const baseUsage = usageSummary.usage ?? asRecord(usageRaw);
+  const usage = withUsageCredits(baseUsage, creditsUsed);
+  if (usage && costUsd !== undefined && !asRecord(usage.cost)) {
+    usage.cost = {
+      total: costUsd,
+      totalUsd: costUsd,
+      usd: costUsd,
+    };
+  }
+  return {
+    usage,
+    creditsUsed,
+  };
 }
 
 export type ChatRunEntry = {
@@ -96,6 +152,7 @@ export type ChatRunState = {
   buffers: Map<string, string>;
   deltaSentAt: Map<string, number>;
   abortedRuns: Map<string, number>;
+  terminalUsageByRun: Map<string, TerminalUsageSnapshot>;
   clear: () => void;
 };
 
@@ -104,12 +161,14 @@ export function createChatRunState(): ChatRunState {
   const buffers = new Map<string, string>();
   const deltaSentAt = new Map<string, number>();
   const abortedRuns = new Map<string, number>();
+  const terminalUsageByRun = new Map<string, TerminalUsageSnapshot>();
 
   const clear = () => {
     registry.clear();
     buffers.clear();
     deltaSentAt.clear();
     abortedRuns.clear();
+    terminalUsageByRun.clear();
   };
 
   return {
@@ -117,6 +176,7 @@ export function createChatRunState(): ChatRunState {
     buffers,
     deltaSentAt,
     abortedRuns,
+    terminalUsageByRun,
     clear,
   };
 }
@@ -262,24 +322,37 @@ export function createAgentEventHandler({
     clientRunId: string,
     seq: number,
     jobState: "done" | "error",
+    sourceRunId: string,
     error?: unknown,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
     const shouldSuppressSilent = isSilentReplyText(text, SILENT_REPLY_TOKEN);
+    const terminalUsage =
+      chatRunState.terminalUsageByRun.get(sourceRunId) ??
+      chatRunState.terminalUsageByRun.get(clientRunId);
+    const creditsUsed = terminalUsage?.creditsUsed ?? 0;
+    const usage = terminalUsage?.usage;
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
+    chatRunState.terminalUsageByRun.delete(sourceRunId);
+    chatRunState.terminalUsageByRun.delete(clientRunId);
     if (jobState === "done") {
+      const usageWithCredits = withUsageCredits(usage, creditsUsed);
       const payload = {
         runId: clientRunId,
         sessionKey,
         seq,
         state: "final" as const,
+        usage: usageWithCredits,
+        creditsUsed,
+        credits_used: creditsUsed,
         message:
           text && !shouldSuppressSilent
             ? {
                 role: "assistant",
                 content: [{ type: "text", text }],
                 timestamp: Date.now(),
+                usage: usageWithCredits,
               }
             : undefined,
       };
@@ -380,6 +453,11 @@ export function createAgentEventHandler({
 
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
+    if (lifecyclePhase === "end" || lifecyclePhase === "error") {
+      const terminalUsage = resolveTerminalUsageSnapshot(evt.data);
+      chatRunState.terminalUsageByRun.set(evt.runId, terminalUsage);
+      chatRunState.terminalUsageByRun.set(clientRunId, terminalUsage);
+    }
 
     if (sessionKey) {
       // Send tool events to node/channel subscribers only when verbose is enabled;
@@ -401,6 +479,7 @@ export function createAgentEventHandler({
             finished.clientRunId,
             evt.seq,
             lifecyclePhase === "error" ? "error" : "done",
+            evt.runId,
             evt.data?.error,
           );
         } else {
@@ -409,6 +488,7 @@ export function createAgentEventHandler({
             eventRunId,
             evt.seq,
             lifecyclePhase === "error" ? "error" : "done",
+            evt.runId,
             evt.data?.error,
           );
         }
@@ -428,6 +508,8 @@ export function createAgentEventHandler({
       clearAgentRunContext(evt.runId);
       agentRunSeq.delete(evt.runId);
       agentRunSeq.delete(clientRunId);
+      chatRunState.terminalUsageByRun.delete(evt.runId);
+      chatRunState.terminalUsageByRun.delete(clientRunId);
     }
   };
 }

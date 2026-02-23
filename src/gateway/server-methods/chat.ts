@@ -1,12 +1,13 @@
+import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
 import fs from "node:fs";
 import path from "node:path";
-import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
+import type { MsgContext } from "../../auto-reply/templating.js";
+import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveThinkingDefault } from "../../agents/model-selection.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
-import type { MsgContext } from "../../auto-reply/templating.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
@@ -38,10 +39,10 @@ import {
   readSessionMessages,
   resolveSessionModelRef,
 } from "../session-utils.js";
+import { parseGatewayCreditsUsed, withUsageCredits } from "../usage-credits.js";
 import { formatForLog } from "../ws-log.js";
 import { injectTimestamp, timestampOptsFromConfig } from "./agent-timestamp.js";
 import { normalizeRpcAttachmentsToChatAttachments } from "./attachment-normalize.js";
-import type { GatewayRequestContext, GatewayRequestHandlers } from "./types.js";
 
 type TranscriptAppendResult = {
   ok: boolean;
@@ -523,19 +524,42 @@ function nextChatSeq(context: { agentRunSeq: Map<string, number> }, runId: strin
   return next;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function broadcastChatFinal(params: {
   context: Pick<GatewayRequestContext, "broadcast" | "nodeSendToSession" | "agentRunSeq">;
   runId: string;
   sessionKey: string;
   message?: Record<string, unknown>;
+  creditsUsed?: number;
 }) {
+  const messageUsage = asRecord(params.message?.usage);
+  const messageCredits =
+    parseGatewayCreditsUsed(messageUsage?.creditsUsed) ??
+    parseGatewayCreditsUsed(messageUsage?.credits_used);
+  const fallbackCredits = parseGatewayCreditsUsed(params.creditsUsed) ?? 0;
+  const creditsUsed = messageCredits ?? fallbackCredits;
+  const usage = withUsageCredits(messageUsage, creditsUsed);
+  const message = params.message
+    ? usage
+      ? { ...params.message, usage }
+      : params.message
+    : undefined;
   const seq = nextChatSeq({ agentRunSeq: params.context.agentRunSeq }, params.runId);
   const payload = {
     runId: params.runId,
     sessionKey: params.sessionKey,
     seq,
     state: "final" as const,
-    message: params.message,
+    message,
+    usage,
+    creditsUsed,
+    credits_used: creditsUsed,
   };
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
@@ -1061,15 +1085,13 @@ export const chatHandlers: GatewayRequestHandlers = {
     }
 
     // Broadcast to webchat for immediate UI update
-    const chatPayload = {
+    broadcastChatFinal({
+      context,
       runId: `inject-${appended.messageId}`,
       sessionKey: rawSessionKey,
-      seq: 0,
-      state: "final" as const,
       message: appended.message,
-    };
-    context.broadcast("chat", chatPayload);
-    context.nodeSendToSession(rawSessionKey, "chat", chatPayload);
+      creditsUsed: 0,
+    });
 
     respond(true, { ok: true, messageId: appended.messageId });
   },

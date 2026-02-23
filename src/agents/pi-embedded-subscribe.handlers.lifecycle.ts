@@ -1,13 +1,49 @@
+import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
+import { resolveGatewayUsageWithCredits } from "../gateway/usage-credits.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
 import { formatAssistantErrorText } from "./pi-embedded-helpers.js";
-import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
 import { isAssistantMessage } from "./pi-embedded-utils.js";
 
 export {
   handleAutoCompactionEnd,
   handleAutoCompactionStart,
 } from "./pi-embedded-subscribe.handlers.compaction.js";
+
+function buildTerminalLifecycleData(
+  ctx: EmbeddedPiSubscribeContext,
+  endedAt: number,
+): Record<string, unknown> {
+  const lastAssistant = ctx.state.lastAssistant;
+  const provider =
+    isAssistantMessage(lastAssistant) && typeof lastAssistant.provider === "string"
+      ? lastAssistant.provider
+      : undefined;
+  const model =
+    isAssistantMessage(lastAssistant) && typeof lastAssistant.model === "string"
+      ? lastAssistant.model
+      : undefined;
+  const usageWithCredits = resolveGatewayUsageWithCredits({
+    usageRaw:
+      isAssistantMessage(lastAssistant) &&
+      typeof (lastAssistant as { usage?: unknown }).usage !== "undefined"
+        ? (lastAssistant as { usage?: unknown }).usage
+        : undefined,
+    provider,
+    model,
+    config: ctx.params.config,
+  });
+
+  return {
+    endedAt,
+    provider,
+    model,
+    usage: usageWithCredits.usage,
+    costUsd: usageWithCredits.costUsd,
+    creditsUsed: usageWithCredits.creditsUsed,
+    credits_used: usageWithCredits.creditsUsed,
+  };
+}
 
 export function handleAgentStart(ctx: EmbeddedPiSubscribeContext) {
   ctx.log.debug(`embedded run agent start: runId=${ctx.params.runId}`);
@@ -28,6 +64,8 @@ export function handleAgentStart(ctx: EmbeddedPiSubscribeContext) {
 export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
   const lastAssistant = ctx.state.lastAssistant;
   const isError = isAssistantMessage(lastAssistant) && lastAssistant.stopReason === "error";
+  const endedAt = Date.now();
+  const terminalData = buildTerminalLifecycleData(ctx, endedAt);
 
   ctx.log.debug(`embedded run agent end: runId=${ctx.params.runId} isError=${isError}`);
 
@@ -44,7 +82,7 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       data: {
         phase: "error",
         error: friendlyError || lastAssistant.errorMessage || "LLM request failed.",
-        endedAt: Date.now(),
+        ...terminalData,
       },
     });
     void ctx.params.onAgentEvent?.({
@@ -52,6 +90,7 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       data: {
         phase: "error",
         error: friendlyError || lastAssistant.errorMessage || "LLM request failed.",
+        ...terminalData,
       },
     });
   } else {
@@ -60,12 +99,12 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       stream: "lifecycle",
       data: {
         phase: "end",
-        endedAt: Date.now(),
+        ...terminalData,
       },
     });
     void ctx.params.onAgentEvent?.({
       stream: "lifecycle",
-      data: { phase: "end" },
+      data: { phase: "end", ...terminalData },
     });
   }
 
