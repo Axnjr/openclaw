@@ -23,6 +23,9 @@ RUN pnpm ui:build
 
 ENV NODE_ENV=production
 
+ARG OPENCLAW_IMAGE_IDENTIFIER=unknown
+ENV OPENCLAW_IMAGE_IDENTIFIER=${OPENCLAW_IMAGE_IDENTIFIER}
+
 # Set default Railway/Lazzy environment variables
 ENV OPENCLAW_STATE_DIR=/app/.openclaw
 ENV OPENCLAW_WORKSPACE_DIR=/app/workspace
