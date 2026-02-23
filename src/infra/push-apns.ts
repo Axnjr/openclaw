@@ -249,6 +249,11 @@ export async function loadApnsRegistration(
   return state.registrationsByNodeId[normalizedNodeId] ?? null;
 }
 
+export async function loadAllApnsRegistrations(baseDir?: string): Promise<ApnsRegistration[]> {
+  const state = await loadRegistrationsState(baseDir);
+  return Object.values(state.registrationsByNodeId);
+}
+
 export async function resolveApnsAuthConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ApnsAuthConfigResolution> {

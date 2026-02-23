@@ -3,6 +3,11 @@ import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
+import {
+  resolveApnsAuthConfigFromEnv,
+  loadAllApnsRegistrations,
+  sendApnsAlert,
+} from "../infra/push-apns.js";
 import { loadSessionEntry } from "./session-utils.js";
 import {
   parseGatewayCreditsUsed,
@@ -408,6 +413,47 @@ export function createAgentEventHandler({
         broadcast("chat", payload);
       }
       nodeSendToSession(sessionKey, "chat", payload);
+
+      if (text && !shouldSuppressSilent) {
+        setImmediate(() => {
+          void (async () => {
+            try {
+              const registrations = await loadAllApnsRegistrations();
+              if (registrations.length === 0) {
+                return;
+              }
+              const auth = await resolveApnsAuthConfigFromEnv(process.env);
+              if (!auth.ok) {
+                return;
+              }
+              const title = "New message from Gwal";
+              const body = text.length > 100 ? text.slice(0, 97) + "..." : text;
+              await Promise.allSettled(
+                registrations.map(async (registration) => {
+                  try {
+                    await sendApnsAlert({
+                      auth: auth.value,
+                      registration,
+                      nodeId: registration.nodeId,
+                      title,
+                      body,
+                    });
+                  } catch (err) {
+                    console.warn(
+                      `[push-apns] Failed to auto-push to ${registration.nodeId}: \n${JSON.stringify(err, null, 4)}`,
+                    );
+                  }
+                }),
+              );
+            } catch (err) {
+              console.warn(
+                `[push-apns] Failed to auto-push chat message: \n${JSON.stringify(err, null, 4)}`,
+              );
+            }
+          })();
+        });
+      }
+
       return;
     }
     const payload = {
