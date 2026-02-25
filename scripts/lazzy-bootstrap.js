@@ -39,6 +39,9 @@ const runtimeFingerprint = {
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID?.trim() || "unknown",
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
+console.log(
+  "[Bootstrap] Last Change was on Wed 25th Feb 2025, fixed APN issue & changed notification title. \n\n\n",
+);
 console.log(`[Bootstrap] 🚀 Starting OpenClaw Gateway (${runtimeFingerprint.imageIdentifier})`);
 console.log("[Bootstrap] Runtime fingerprint", runtimeFingerprint);
 
@@ -112,6 +115,16 @@ if (model) {
 
 if (!fs.existsSync(stateDir)) {
   fs.mkdirSync(stateDir, { recursive: true });
+}
+
+if (process.env.OPENCLAW_SYSTEM_PROMPT) {
+  const soulPath = path.join(stateDir, "SOUL.md"); // Assuming stateDir is the correct base for SOUL.md
+  fs.writeFileSync(soulPath, process.env.OPENCLAW_SYSTEM_PROMPT);
+  console.log("[Bootstrap] Wrote OPENCLAW_SYSTEM_PROMPT to SOUL.md");
+} else {
+  console.log(
+    "\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT found in environment, proceeding with defaults.\n\n\n",
+  );
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));

@@ -145,7 +145,7 @@ describe("model-selection", () => {
   });
 
   describe("resolveConfiguredModelRef", () => {
-    it("should fall back to anthropic and warn if provider is missing for non-alias", () => {
+    it("should fall back to default provider and warn if provider is missing for non-alias", () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const cfg: Partial<OpenClawConfig> = {
         agents: {
@@ -161,9 +161,9 @@ describe("model-selection", () => {
         defaultModel: "gemini-pro",
       });
 
-      expect(result).toEqual({ provider: "anthropic", model: "claude-3-5-sonnet" });
+      expect(result).toEqual({ provider: "google", model: "claude-3-5-sonnet" });
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Falling back to "anthropic/claude-3-5-sonnet"'),
+        expect.stringContaining('Falling back to "google/claude-3-5-sonnet"'),
       );
       warnSpy.mockRestore();
     });

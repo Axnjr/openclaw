@@ -1,3 +1,4 @@
+import type { NodeRegistry } from "./node-registry.js";
 import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
@@ -316,6 +317,8 @@ export type AgentEventHandlerOptions = {
   resolveSessionKeyForRun: (runId: string) => string | undefined;
   clearAgentRunContext: (runId: string) => void;
   toolEventRecipients: ToolEventRecipientRegistry;
+  /** Optional: when provided, nodes that are currently connected via WebSocket will be skipped for push notifications. */
+  nodeRegistry?: NodeRegistry;
 };
 
 export function createAgentEventHandler({
@@ -327,6 +330,7 @@ export function createAgentEventHandler({
   resolveSessionKeyForRun,
   clearAgentRunContext,
   toolEventRecipients,
+  nodeRegistry,
 }: AgentEventHandlerOptions) {
   const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
     if (isSilentReplyText(text, SILENT_REPLY_TOKEN)) {
@@ -426,10 +430,19 @@ export function createAgentEventHandler({
               if (!auth.ok) {
                 return;
               }
-              const title = "New message from Gwal";
+              const title = "I need your attention.";
               const body = text.length > 100 ? text.slice(0, 97) + "..." : text;
+              // Only push to nodes that are NOT currently connected via WebSocket.
+              // If the node is connected, the app is in the foreground and already
+              // received the message via the live socket — no push needed.
+              const offlineRegistrations = nodeRegistry
+                ? registrations.filter((r) => !nodeRegistry.get(r.nodeId))
+                : registrations;
+              if (offlineRegistrations.length === 0) {
+                return;
+              }
               await Promise.allSettled(
-                registrations.map(async (registration) => {
+                offlineRegistrations.map(async (registration) => {
                   try {
                     await sendApnsAlert({
                       auth: auth.value,
