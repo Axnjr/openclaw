@@ -98,6 +98,11 @@ const runtimeFingerprint = {
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID?.trim() || "unknown",
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
+console.log(
+  "\n\n\n[Bootstrap] WITH SOUL & NAME CONFIG; OPENCLAW_MODEL",
+  process.env.OPENCLAW_MODEL,
+  "\n\n\n",
+);
 console.log(`[Bootstrap] 🚀 Starting OpenClaw Gateway (${runtimeFingerprint.imageIdentifier})`);
 console.log("[Bootstrap] Runtime fingerprint", runtimeFingerprint);
 
