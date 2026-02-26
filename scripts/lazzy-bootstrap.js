@@ -30,6 +30,65 @@ if (fs.existsSync(configPath)) {
   }
 }
 
+function ensureAgentsDefaults() {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    config = {};
+  }
+  config.agents = config.agents && typeof config.agents === "object" ? config.agents : {};
+  config.agents.defaults =
+    config.agents.defaults && typeof config.agents.defaults === "object"
+      ? config.agents.defaults
+      : {};
+  return config.agents.defaults;
+}
+
+function resolveFallbackWorkspaceDir() {
+  const rawHome =
+    process.env.OPENCLAW_HOME?.trim() ||
+    process.env.HOME?.trim() ||
+    process.env.USERPROFILE?.trim() ||
+    "/home/node";
+  const homeDir = rawHome.startsWith("~")
+    ? rawHome.replace(/^~(?=$|[\\/])/, process.env.HOME?.trim() || "/home/node")
+    : rawHome;
+  return path.join(path.resolve(homeDir), ".openclaw", "workspace");
+}
+
+function resolveUserPath(input) {
+  const trimmed = typeof input === "string" ? input.trim() : "";
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.startsWith("~")) {
+    const homeDir =
+      process.env.OPENCLAW_HOME?.trim() ||
+      process.env.HOME?.trim() ||
+      process.env.USERPROFILE?.trim() ||
+      "/home/node";
+    return path.resolve(trimmed.replace(/^~(?=$|[\\/])/, homeDir));
+  }
+  return path.resolve(trimmed);
+}
+
+function resolveConfiguredWorkspaceDir() {
+  if (
+    config &&
+    typeof config === "object" &&
+    !Array.isArray(config) &&
+    config.agents &&
+    typeof config.agents === "object" &&
+    config.agents.defaults &&
+    typeof config.agents.defaults === "object" &&
+    typeof config.agents.defaults.workspace === "string"
+  ) {
+    const resolved = resolveUserPath(config.agents.defaults.workspace);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return "";
+}
+
 const buildInfo = readBuildInfo();
 const runtimeFingerprint = {
   imageIdentifier: process.env.OPENCLAW_IMAGE_IDENTIFIER?.trim() || "unset",
@@ -39,9 +98,6 @@ const runtimeFingerprint = {
   railwayDeploymentId: process.env.RAILWAY_DEPLOYMENT_ID?.trim() || "unknown",
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
-console.log(
-  "[Bootstrap] Last Change was on Wed 25th Feb 2025, fixed APN issue & changed notification title. \n\n\n",
-);
 console.log(`[Bootstrap] 🚀 Starting OpenClaw Gateway (${runtimeFingerprint.imageIdentifier})`);
 console.log("[Bootstrap] Runtime fingerprint", runtimeFingerprint);
 
@@ -117,13 +173,40 @@ if (!fs.existsSync(stateDir)) {
   fs.mkdirSync(stateDir, { recursive: true });
 }
 
+const workspaceDirFromEnv = process.env.OPENCLAW_WORKSPACE_DIR?.trim() || "";
+const configuredWorkspaceDir = resolveConfiguredWorkspaceDir();
+const effectiveWorkspaceDir = workspaceDirFromEnv
+  ? resolveUserPath(workspaceDirFromEnv)
+  : configuredWorkspaceDir || resolveFallbackWorkspaceDir();
+
+if (workspaceDirFromEnv) {
+  const defaults = ensureAgentsDefaults();
+  if (typeof defaults.workspace !== "string" || !defaults.workspace.trim()) {
+    defaults.workspace = effectiveWorkspaceDir;
+    console.log(
+      `[Bootstrap] Set agents.defaults.workspace from OPENCLAW_WORKSPACE_DIR: ${effectiveWorkspaceDir}`,
+    );
+  }
+}
+
+if (process.env.OPENCLAW_AGENT_NAME) {
+  const defaults = ensureAgentsDefaults();
+  defaults.name = process.env.OPENCLAW_AGENT_NAME.trim();
+  console.log(`[Bootstrap] Set agents.defaults.name to: ${defaults.name}`);
+}
+
+if (!fs.existsSync(effectiveWorkspaceDir)) {
+  fs.mkdirSync(effectiveWorkspaceDir, { recursive: true });
+}
+console.log(`[Bootstrap] Resolved effective workspace directory: ${effectiveWorkspaceDir}`);
+
 if (process.env.OPENCLAW_SYSTEM_PROMPT) {
-  const soulPath = path.join(stateDir, "SOUL.md"); // Assuming stateDir is the correct base for SOUL.md
+  const soulPath = path.join(effectiveWorkspaceDir, "SOUL.md");
   fs.writeFileSync(soulPath, process.env.OPENCLAW_SYSTEM_PROMPT);
-  console.log("[Bootstrap] Wrote OPENCLAW_SYSTEM_PROMPT to SOUL.md");
+  console.log(`[Bootstrap] Wrote OPENCLAW_SYSTEM_PROMPT to ${soulPath}`);
 } else {
   console.log(
-    "\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT found in environment, proceeding with defaults.\n\n\n",
+    `\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT found in environment, proceeding with defaults. Workspace: ${effectiveWorkspaceDir}\n\n\n`,
   );
 }
 
