@@ -194,24 +194,24 @@ if (workspaceDirFromEnv) {
   }
 }
 
-if (process.env.OPENCLAW_AGENT_NAME) {
-  const defaults = ensureAgentsDefaults();
-  defaults.name = process.env.OPENCLAW_AGENT_NAME.trim();
-  console.log(`[Bootstrap] Set agents.defaults.name to: ${defaults.name}`);
-}
-
 if (!fs.existsSync(effectiveWorkspaceDir)) {
   fs.mkdirSync(effectiveWorkspaceDir, { recursive: true });
 }
 console.log(`[Bootstrap] Resolved effective workspace directory: ${effectiveWorkspaceDir}`);
 
-if (process.env.OPENCLAW_SYSTEM_PROMPT) {
+const agentName = process.env.OPENCLAW_AGENT_NAME?.trim() || "";
+const systemPrompt = process.env.OPENCLAW_SYSTEM_PROMPT?.trim() || "";
+
+if (agentName || systemPrompt) {
   const soulPath = path.join(effectiveWorkspaceDir, "SOUL.md");
-  fs.writeFileSync(soulPath, process.env.OPENCLAW_SYSTEM_PROMPT);
-  console.log(`[Bootstrap] Wrote OPENCLAW_SYSTEM_PROMPT to ${soulPath}`);
+  const namePart = agentName ? `# ${agentName}\n\n` : "";
+  fs.writeFileSync(soulPath, namePart + systemPrompt);
+  console.log(
+    `[Bootstrap] Wrote SOUL.md to ${soulPath} (name=${agentName || "(none)"}, prompt=${systemPrompt ? "yes" : "none"})`,
+  );
 } else {
   console.log(
-    `\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT found in environment, proceeding with defaults. Workspace: ${effectiveWorkspaceDir}\n\n\n`,
+    `\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT or OPENCLAW_AGENT_NAME found, proceeding with defaults. Workspace: ${effectiveWorkspaceDir}\n\n\n`,
   );
 }
 
