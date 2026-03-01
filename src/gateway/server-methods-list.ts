@@ -54,6 +54,7 @@ const BASE_METHODS = [
   "sessions.reset",
   "sessions.delete",
   "sessions.compact",
+  "peers.sync_config",
   "last-heartbeat",
   "set-heartbeats",
   "wake",

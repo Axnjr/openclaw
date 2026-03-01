@@ -99,7 +99,7 @@ const runtimeFingerprint = {
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
 console.log(
-  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS FEATURE ADDITIONS: Sun 1st March 2026",
+  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS + Group Agent Collabartion & Chat FEATURE ADDITIONS: Sun 1st March 2026",
   process.env.OPENCLAW_MODEL,
   "\n\n\n",
 );
@@ -172,6 +172,14 @@ if (model) {
   console.log(`[Bootstrap] Configured primary model to: ${model}`);
 } else {
   console.log("[Bootstrap] No OPENCLAW_MODEL found in environment, proceeding with defaults.");
+}
+
+config.agents = config.agents || {};
+config.agents.defaults = config.agents.defaults || {};
+config.agents.defaults.skills = config.agents.defaults.skills || [];
+if (!config.agents.defaults.skills.includes("message-other-agent")) {
+  config.agents.defaults.skills.push("message-other-agent");
+  console.log("\n\n 🤩🔥 [Bootstrap] Added 'message-other-agent' to default skills. \n\n");
 }
 
 if (!fs.existsSync(stateDir)) {
