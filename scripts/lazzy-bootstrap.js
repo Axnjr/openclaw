@@ -153,6 +153,13 @@ const gatewayConfig = {
     dangerouslyDisableDeviceAuth: true,
     allowInsecureAuth: true,
   },
+  http: {
+    endpoints: {
+      chatCompletions: {
+        enabled: true,
+      },
+    },
+  },
 };
 
 if (trustedProxies.length > 0) {
@@ -233,6 +240,12 @@ if (agentName || systemPrompt || identityPrompt || userPrompt) {
     fs.writeFileSync(userPath, userPrompt);
     console.log(`[Bootstrap] Wrote USER.md to ${userPath}`);
   }
+
+  // Inject AGENTS.md so the agent knows about its peers
+  const agentsPath = path.join(effectiveWorkspaceDir, "AGENTS.md");
+  const agentsContent = `# Peer Agents Context\\n\\nYou belong to a network of AI agents deployed by your user. Your peer agents frequently sync their contact information to the file \`peers.md\` in this directory.\\n\\nWhen the user asks you to talk to, collaborate with, or assign a task to another agent, you should first read \`peers.md\` to find their exact Agent Name, then use the \`message-other-agent\` skill to communicate with them.\\n`;
+  fs.writeFileSync(agentsPath, agentsContent);
+  console.log(`[Bootstrap] Wrote AGENTS.md to ${agentsPath}`);
 
   // Remove BOOTSTRAP.md so the agent starts from the user's SOUL instead of
   // treating the generic bootstrap directives as a higher-priority "birth certificate".
