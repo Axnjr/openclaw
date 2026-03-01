@@ -99,7 +99,7 @@ const runtimeFingerprint = {
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
 console.log(
-  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS + Group Agent Collabartion & Chat FEATURE ADDITIONS: Sun 1st March 2026",
+  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS + Group Agent Collabartion & Chat FEATURE + ENV VAR HANDLING ADDITIONS: Sun 1st - 10:29 PM March 2026",
   process.env.OPENCLAW_MODEL,
   "\n\n\n",
 );
