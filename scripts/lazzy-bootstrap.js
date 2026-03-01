@@ -99,7 +99,7 @@ const runtimeFingerprint = {
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
 console.log(
-  "\n\n\n[Bootstrap] WITH SOUL & NAME CONFIG; OPENCLAW_MODEL",
+  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS FEATURE ADDITIONS: Sun 1st March 2026",
   process.env.OPENCLAW_MODEL,
   "\n\n\n",
 );
@@ -194,25 +194,59 @@ if (workspaceDirFromEnv) {
   }
 }
 
-if (process.env.OPENCLAW_AGENT_NAME) {
-  const defaults = ensureAgentsDefaults();
-  defaults.name = process.env.OPENCLAW_AGENT_NAME.trim();
-  console.log(`[Bootstrap] Set agents.defaults.name to: ${defaults.name}`);
-}
-
 if (!fs.existsSync(effectiveWorkspaceDir)) {
   fs.mkdirSync(effectiveWorkspaceDir, { recursive: true });
 }
 console.log(`[Bootstrap] Resolved effective workspace directory: ${effectiveWorkspaceDir}`);
 
-if (process.env.OPENCLAW_SYSTEM_PROMPT) {
-  const soulPath = path.join(effectiveWorkspaceDir, "SOUL.md");
-  fs.writeFileSync(soulPath, process.env.OPENCLAW_SYSTEM_PROMPT);
-  console.log(`[Bootstrap] Wrote OPENCLAW_SYSTEM_PROMPT to ${soulPath}`);
+const agentName = process.env.OPENCLAW_AGENT_NAME?.trim() || "";
+const systemPrompt = process.env.OPENCLAW_SYSTEM_PROMPT?.trim() || "";
+const identityPrompt = process.env.OPENCLAW_IDENTITY?.trim() || "";
+const userPrompt = process.env.OPENCLAW_USER?.trim() || "";
+
+if (agentName || systemPrompt || identityPrompt || userPrompt) {
+  if (agentName || systemPrompt) {
+    const soulPath = path.join(effectiveWorkspaceDir, "SOUL.md");
+    const namePart = agentName ? `# ${agentName}\n\n` : "";
+    fs.writeFileSync(soulPath, namePart + systemPrompt);
+    console.log(
+      `[Bootstrap] Wrote SOUL.md to ${soulPath} (name=${agentName || "(none)"}, prompt=${systemPrompt ? "yes" : "none"})`,
+    );
+  }
+
+  if (identityPrompt) {
+    const identityPath = path.join(effectiveWorkspaceDir, "IDENTITY.md");
+    fs.writeFileSync(identityPath, identityPrompt);
+    console.log(`[Bootstrap] Wrote IDENTITY.md to ${identityPath}`);
+  }
+
+  if (userPrompt) {
+    const userPath = path.join(effectiveWorkspaceDir, "USER.md");
+    fs.writeFileSync(userPath, userPrompt);
+    console.log(`[Bootstrap] Wrote USER.md to ${userPath}`);
+  }
+
+  // Remove BOOTSTRAP.md so the agent starts from the user's SOUL instead of
+  // treating the generic bootstrap directives as a higher-priority "birth certificate".
+  // Only do this when a real personality was provided — agentName alone is always set
+  // and doesn't indicate an intentional soul configuration.
+  if (systemPrompt) {
+    const bootstrapPath = path.join(effectiveWorkspaceDir, "BOOTSTRAP.md");
+    if (fs.existsSync(bootstrapPath)) {
+      fs.unlinkSync(bootstrapPath);
+      console.log(`[Bootstrap] Removed BOOTSTRAP.md — agent will start from SOUL.md`);
+    }
+  }
 } else {
   console.log(
-    `\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT found in environment, proceeding with defaults. Workspace: ${effectiveWorkspaceDir}\n\n\n`,
+    `\n\n\n[Bootstrap] No OPENCLAW_SYSTEM_PROMPT or OPENCLAW_AGENT_NAME found, proceeding with defaults. Workspace: ${effectiveWorkspaceDir}\n\n\n`,
   );
+}
+
+// Clean up any unrecognized keys from previous bootstrap versions before writing.
+// Older Docker image versions wrote `agents.defaults.name` which is no longer valid.
+if (config.agents?.defaults && typeof config.agents.defaults === "object") {
+  delete config.agents.defaults.name;
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
