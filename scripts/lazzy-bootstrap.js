@@ -99,9 +99,12 @@ const runtimeFingerprint = {
   railwayServiceId: process.env.RAILWAY_SERVICE_ID?.trim() || "unknown",
 };
 console.log(
-  "\n\n\n[Bootstrap] WITH SOUL, IDENTITY & USER PROMPTS + Group Agent Collabartion & Chat FEATURE + ENV VAR HANDLING ADDITIONS: Sun 1st - 10:29 PM March 2026",
-  process.env.OPENCLAW_MODEL,
-  "\n\n\n",
+  `\n\n\n[Bootstrap] 
+  WITH SOUL, IDENTITY & USER PROMPTS + 
+  Group Agent Collabartion & Chat FEATURE + 
+  ENV VAR HANDLING +  
+  Group Chat logging to DB ADDITIONS: 
+  Mon 2nd - 6:25 AM March 2026 ${process.env.OPENCLAW_MODEL}\n\n\n`,
 );
 console.log(`[Bootstrap] 🚀 Starting OpenClaw Gateway (${runtimeFingerprint.imageIdentifier})`);
 console.log("[Bootstrap] Runtime fingerprint", runtimeFingerprint);
