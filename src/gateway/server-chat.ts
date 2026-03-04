@@ -468,6 +468,52 @@ export function createAgentEventHandler({
         });
       }
 
+      // --- Live Activity update push (updates Dynamic Island from "thinking" to reply) ---
+      if (text && !shouldSuppressSilent) {
+        setImmediate(() => {
+          void (async () => {
+            try {
+              const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
+              const controlPlaneUrl =
+                process.env.OPENCLAW_CONTROL_PLANE_URL ||
+                process.env.LAZZY_CONTROL_PLANE_URL ||
+                "https://gwal.ai";
+              if (!gatewayToken) {
+                return;
+              }
+              const agentName = process.env.OPENCLAW_AGENT_NAME || "Agent";
+              const replyPreview = text.length > 200 ? text.slice(0, 197) + "..." : text;
+              const approvalId = `reply-${sessionKey}-pending`;
+
+              const res = await fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${gatewayToken}`,
+                },
+                body: JSON.stringify({
+                  approvalId,
+                  status: "replied",
+                  headline: `${agentName} replied`,
+                  message: replyPreview,
+                  commandText: "",
+                }),
+              });
+              if (!res.ok) {
+                const errBody = await res.text().catch(() => "");
+                console.warn(
+                  `[live-activity] Failed to push reply Live Activity update (${res.status}): ${errBody}`,
+                );
+              }
+            } catch (err) {
+              console.warn(
+                `[live-activity] Failed to push reply Live Activity update: ${JSON.stringify(err)}`,
+              );
+            }
+          })();
+        });
+      }
+
       return;
     }
     const payload = {
