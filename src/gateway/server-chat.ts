@@ -430,7 +430,8 @@ export function createAgentEventHandler({
               if (!auth.ok) {
                 return;
               }
-              const title = "I need your attention.";
+              const agentName = process.env.OPENCLAW_AGENT_NAME || "Agent";
+              const title = `${agentName} needs your attention.`;
               const body = text.length > 100 ? text.slice(0, 97) + "..." : text;
               // Only push to nodes that are NOT currently connected via WebSocket.
               // If the node is connected, the app is in the foreground and already

@@ -1,9 +1,10 @@
 import type { ExecApprovalForwarder } from "../../infra/exec-approval-forwarder.js";
+import type { ExecApprovalManager } from "../exec-approval-manager.js";
+import type { GatewayRequestHandlers } from "./types.js";
 import {
   DEFAULT_EXEC_APPROVAL_TIMEOUT_MS,
   type ExecApprovalDecision,
 } from "../../infra/exec-approvals.js";
-import type { ExecApprovalManager } from "../exec-approval-manager.js";
 import {
   ErrorCodes,
   errorShape,
@@ -11,7 +12,6 @@ import {
   validateExecApprovalRequestParams,
   validateExecApprovalResolveParams,
 } from "../protocol/index.js";
-import type { GatewayRequestHandlers } from "./types.js";
 
 export function createExecApprovalHandlers(
   manager: ExecApprovalManager,
@@ -96,6 +96,41 @@ export function createExecApprovalHandlers(
         },
         { dropIfSlow: true },
       );
+
+      const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
+      const controlPlaneUrl =
+        process.env.OPENCLAW_CONTROL_PLANE_URL ||
+        process.env.LAZZY_CONTROL_PLANE_URL ||
+        "https://gwal.ai";
+
+      if (gatewayToken) {
+        const commandPreview =
+          record.request.command.length > 120
+            ? `${record.request.command.slice(0, 117)}...`
+            : record.request.command;
+        const headline = record.request.ask
+          ? (process.env.OPENCLAW_AGENT_NAME ? process.env.OPENCLAW_AGENT_NAME : "Agent") +
+            "needs your input"
+          : "Approve command?";
+        const message = record.request.ask || record.request.command.split("\n")[0].slice(0, 80);
+
+        fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${gatewayToken}`,
+          },
+          body: JSON.stringify({
+            approvalId: record.id,
+            status: "pending",
+            headline,
+            message,
+            commandText: commandPreview,
+          }),
+        }).catch((err) => {
+          context.logGateway?.error?.(`Failed to trigger live activity push: ${String(err)}`);
+        });
+      }
       void opts?.forwarder
         ?.handleRequested({
           id: record.id,
@@ -197,6 +232,39 @@ export function createExecApprovalHandlers(
         { id: p.id, decision, resolvedBy, ts: Date.now() },
         { dropIfSlow: true },
       );
+
+      const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
+      const controlPlaneUrl =
+        process.env.OPENCLAW_CONTROL_PLANE_URL ||
+        process.env.LAZZY_CONTROL_PLANE_URL ||
+        "https://gwal.ai";
+
+      if (gatewayToken) {
+        const headline = decision === "deny" ? "Command denied" : "Command approved";
+        const message =
+          decision === "allow-always"
+            ? "Always allowed for this command."
+            : decision === "deny"
+              ? "The command was denied."
+              : "The command was approved.";
+
+        fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${gatewayToken}`,
+          },
+          body: JSON.stringify({
+            approvalId: p.id,
+            status: decision === "deny" ? "denied" : "approved",
+            headline,
+            message,
+            commandText: "",
+          }),
+        }).catch((err) => {
+          context.logGateway?.error?.(`Failed to trigger live activity push: ${String(err)}`);
+        });
+      }
       void opts?.forwarder
         ?.handleResolved({ id: p.id, decision, resolvedBy, ts: Date.now() })
         .catch((err) => {
