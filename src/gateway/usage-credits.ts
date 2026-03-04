@@ -1,5 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
-import { normalizeUsage, type UsageLike } from "../agents/usage.js";
+import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "../agents/usage.js";
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
 
 const USD_PER_CREDIT = 0.01;
@@ -133,27 +133,39 @@ export function resolveGatewayUsageWithCredits(params: {
 }): GatewayUsageWithCredits {
   const normalizedUsage = normalizeUsage((params.usageRaw ?? undefined) as UsageLike | undefined);
   const explicitCostUsd = resolveUsageCostUsd(params.usageRaw);
-  const resolvedCostUsd =
-    explicitCostUsd ??
-    (normalizedUsage
-      ? estimateUsageCost({
-          usage: normalizedUsage,
-          cost: resolveGatewayModelCostConfig({
-            provider: params.provider,
-            model: params.model,
-            config: params.config,
-          }),
-        })
-      : undefined);
+  const derivedCostUsd = normalizedUsage
+    ? estimateUsageCost({
+        usage: normalizedUsage,
+        cost: resolveGatewayModelCostConfig({
+          provider: params.provider,
+          model: params.model,
+          config: params.config,
+        }),
+      })
+    : undefined;
+  const shouldPreferDerivedCost =
+    explicitCostUsd === 0 &&
+    hasNonzeroUsage(normalizedUsage) &&
+    typeof derivedCostUsd === "number" &&
+    Number.isFinite(derivedCostUsd) &&
+    derivedCostUsd > 0;
+  const resolvedCostUsd = shouldPreferDerivedCost
+    ? derivedCostUsd
+    : (explicitCostUsd ?? derivedCostUsd);
   const costUsd =
     typeof resolvedCostUsd === "number" && Number.isFinite(resolvedCostUsd) && resolvedCostUsd >= 0
       ? resolvedCostUsd
       : undefined;
 
-  const creditsFromUsage = resolveUsageCredits(params.usageRaw);
-  const creditsUsed = roundGatewayCredits(
-    creditsFromUsage ?? (costUsd !== undefined ? costUsd / USD_PER_CREDIT : 0),
-  );
+  const explicitCreditsFromUsage = resolveUsageCredits(params.usageRaw);
+  const derivedCreditsFromCost = costUsd !== undefined ? costUsd / USD_PER_CREDIT : 0;
+  const shouldPreferDerivedCredits =
+    explicitCreditsFromUsage === 0 &&
+    hasNonzeroUsage(normalizedUsage) &&
+    Number.isFinite(derivedCreditsFromCost) &&
+    derivedCreditsFromCost > 0;
+  const creditsFromUsage = shouldPreferDerivedCredits ? undefined : explicitCreditsFromUsage;
+  const creditsUsed = roundGatewayCredits(creditsFromUsage ?? derivedCreditsFromCost);
 
   if (!normalizedUsage) {
     return { creditsUsed, costUsd };

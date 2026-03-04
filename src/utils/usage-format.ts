@@ -16,6 +16,59 @@ export type UsageTotals = {
   total?: number;
 };
 
+const OPENROUTER_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
+  "qwen/qwen3.5-35b-a3b": {
+    input: 0.2,
+    output: 1.4,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "openai/gpt-5.3-codex": {
+    input: 1.75,
+    output: 14,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "minimax/minimax-m2.5": {
+    input: 0.3,
+    output: 1.2,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "x-ai/grok-4.1-fast": {
+    input: 0.3,
+    output: 0.6,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "moonshotai/kimi-k2-thinking": {
+    input: 0.5,
+    output: 2.2,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "google/gemini-3.1-pro-preview-customtools": {
+    input: 2,
+    output: 12,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "google/gemini-3.1-pro-preview": {
+    input: 2,
+    output: 12,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+};
+
+function normalizeOpenRouterCostLookupModelId(model: string): string {
+  const trimmed = model.trim();
+  if (trimmed.startsWith("openrouter/")) {
+    return trimmed.slice("openrouter/".length);
+  }
+  return trimmed;
+}
+
 export function formatTokenCount(value?: number): string {
   if (value === undefined || !Number.isFinite(value)) {
     return "0";
@@ -55,7 +108,15 @@ export function resolveModelCostConfig(params: {
   }
   const providers = params.config?.models?.providers ?? {};
   const entry = providers[provider]?.models?.find((item) => item.id === model);
-  return entry?.cost;
+  if (entry?.cost) {
+    return entry.cost;
+  }
+
+  if (provider.toLowerCase() !== "openrouter") {
+    return undefined;
+  }
+
+  return OPENROUTER_DYNAMIC_MODEL_COSTS[normalizeOpenRouterCostLookupModelId(model)];
 }
 
 const toNumber = (value: number | undefined): number =>

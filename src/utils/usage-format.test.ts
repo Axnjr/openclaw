@@ -57,4 +57,18 @@ describe("usage-format", () => {
 
     expect(total).toBeCloseTo(0.003);
   });
+
+  it("resolves built-in OpenRouter pricing for known dynamic models", () => {
+    const cost = resolveModelCostConfig({
+      provider: "openrouter",
+      model: "openrouter/google/gemini-3.1-pro-preview",
+    });
+
+    expect(cost).toEqual({
+      input: 2,
+      output: 12,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+  });
 });
