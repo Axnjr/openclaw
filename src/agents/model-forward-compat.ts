@@ -1,8 +1,8 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
+import type { ModelRegistry } from "./pi-model-discovery.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { normalizeModelCompat } from "./model-compat.js";
 import { normalizeProviderId } from "./model-selection.js";
-import type { ModelRegistry } from "./pi-model-discovery.js";
 
 const OPENAI_CODEX_GPT_53_MODEL_ID = "gpt-5.3-codex";
 const OPENAI_CODEX_TEMPLATE_MODEL_IDS = ["gpt-5.2-codex"] as const;
@@ -16,6 +16,9 @@ const ANTHROPIC_SONNET_TEMPLATE_MODEL_IDS = ["claude-sonnet-4-5", "claude-sonnet
 
 const ZAI_GLM5_MODEL_ID = "glm-5";
 const ZAI_GLM5_TEMPLATE_MODEL_IDS = ["glm-4.7"] as const;
+
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const OPENROUTER_DYNAMIC_MODEL_TEMPLATE_IDS = ["auto"] as const;
 
 const ANTIGRAVITY_OPUS_46_MODEL_ID = "claude-opus-4-6";
 const ANTIGRAVITY_OPUS_46_DOT_MODEL_ID = "claude-opus-4.6";
@@ -224,6 +227,48 @@ function resolveZaiGlm5ForwardCompatModel(
   } as Model<Api>);
 }
 
+function resolveOpenRouterHierarchicalForwardCompatModel(
+  provider: string,
+  modelId: string,
+  modelRegistry: ModelRegistry,
+): Model<Api> | undefined {
+  const normalizedProvider = normalizeProviderId(provider);
+  if (normalizedProvider !== "openrouter") {
+    return undefined;
+  }
+
+  const trimmedModelId = modelId.trim();
+  const segments = trimmedModelId.split("/").map((segment) => segment.trim());
+  if (segments.length < 2 || segments.some((segment) => segment.length === 0)) {
+    return undefined;
+  }
+
+  return (
+    cloneFirstTemplateModel({
+      normalizedProvider,
+      trimmedModelId,
+      templateIds: [...OPENROUTER_DYNAMIC_MODEL_TEMPLATE_IDS],
+      modelRegistry,
+      patch: {
+        api: "openai-completions",
+        baseUrl: OPENROUTER_BASE_URL,
+      },
+    }) ??
+    normalizeModelCompat({
+      id: trimmedModelId,
+      name: trimmedModelId,
+      api: "openai-completions",
+      provider: normalizedProvider,
+      baseUrl: OPENROUTER_BASE_URL,
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: DEFAULT_CONTEXT_TOKENS,
+      maxTokens: DEFAULT_CONTEXT_TOKENS,
+    } as Model<Api>)
+  );
+}
+
 function resolveAntigravityOpus46ForwardCompatModel(
   provider: string,
   modelId: string,
@@ -285,6 +330,7 @@ export function resolveForwardCompatModel(
 ): Model<Api> | undefined {
   return (
     resolveOpenAICodexGpt53FallbackModel(provider, modelId, modelRegistry) ??
+    resolveOpenRouterHierarchicalForwardCompatModel(provider, modelId, modelRegistry) ??
     resolveAnthropicOpus46ForwardCompatModel(provider, modelId, modelRegistry) ??
     resolveAnthropicSonnet46ForwardCompatModel(provider, modelId, modelRegistry) ??
     resolveZaiGlm5ForwardCompatModel(provider, modelId, modelRegistry) ??

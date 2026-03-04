@@ -1,7 +1,7 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
-import { resolveForwardCompatModel } from "./model-forward-compat.js";
 import type { ModelRegistry } from "./pi-model-discovery.js";
+import { resolveForwardCompatModel } from "./model-forward-compat.js";
 
 function createTemplateModel(provider: string, id: string): Model<Api> {
   return {
@@ -26,6 +26,35 @@ function createRegistry(models: Record<string, Model<Api>>): ModelRegistry {
 }
 
 describe("agents/model-forward-compat", () => {
+  it("resolves hierarchical OpenRouter models via the auto template", () => {
+    const registry = createRegistry({
+      "openrouter/auto": {
+        id: "auto",
+        name: "OpenRouter Auto",
+        provider: "openrouter",
+        api: "openai-completions",
+        baseUrl: "https://openrouter.ai/api/v1",
+        input: ["text", "image"],
+        reasoning: false,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 123000,
+        maxTokens: 45600,
+      } as Model<Api>,
+    });
+
+    const model = resolveForwardCompatModel("openrouter", "qwen/qwen3.5-35b-a3b", registry);
+
+    expect(model).toMatchObject({
+      id: "qwen/qwen3.5-35b-a3b",
+      name: "qwen/qwen3.5-35b-a3b",
+      provider: "openrouter",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      contextWindow: 123000,
+      maxTokens: 45600,
+    });
+  });
+
   it("resolves anthropic opus 4.6 via 4.5 template", () => {
     const registry = createRegistry({
       "anthropic/claude-opus-4-5": createTemplateModel("anthropic", "claude-opus-4-5"),

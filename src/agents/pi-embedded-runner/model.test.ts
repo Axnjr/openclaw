@@ -191,6 +191,33 @@ describe("resolveModel", () => {
     });
   });
 
+  it("builds an OpenRouter fallback for new hierarchical catalog models", () => {
+    mockDiscoveredModel({
+      provider: "openrouter",
+      modelId: "auto",
+      templateModel: buildForwardCompatTemplate({
+        id: "auto",
+        name: "OpenRouter Auto",
+        provider: "openrouter",
+        api: "openai-completions",
+        baseUrl: "https://openrouter.ai/api/v1",
+      }),
+    });
+
+    expectResolvedForwardCompatFallback({
+      provider: "openrouter",
+      id: "google/gemini-3.1-pro-preview",
+      expectedModel: {
+        provider: "openrouter",
+        id: "google/gemini-3.1-pro-preview",
+        api: "openai-completions",
+        baseUrl: "https://openrouter.ai/api/v1",
+        contextWindow: 200000,
+        maxTokens: 64000,
+      },
+    });
+  });
+
   it("builds an anthropic forward-compat fallback for claude-opus-4-6", () => {
     mockDiscoveredModel({
       provider: "anthropic",

@@ -13,6 +13,27 @@ export type GatewayUsageWithCredits = {
   creditsUsed: number;
 };
 
+function resolveGatewayModelCostConfig(params: {
+  provider?: string;
+  model?: string;
+  config?: OpenClawConfig;
+}) {
+  const direct = resolveModelCostConfig(params);
+  if (direct || params.provider?.trim() !== "openrouter") {
+    return direct;
+  }
+
+  const model = params.model?.trim();
+  if (!model?.startsWith("openrouter/")) {
+    return direct;
+  }
+
+  return resolveModelCostConfig({
+    ...params,
+    model: model.slice("openrouter/".length),
+  });
+}
+
 function asFiniteNumber(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return undefined;
@@ -117,7 +138,7 @@ export function resolveGatewayUsageWithCredits(params: {
     (normalizedUsage
       ? estimateUsageCost({
           usage: normalizedUsage,
-          cost: resolveModelCostConfig({
+          cost: resolveGatewayModelCostConfig({
             provider: params.provider,
             model: params.model,
             config: params.config,
