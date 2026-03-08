@@ -5,6 +5,7 @@ import {
   DEFAULT_EXEC_APPROVAL_TIMEOUT_MS,
   type ExecApprovalDecision,
 } from "../../infra/exec-approvals.js";
+import { buildControlPlaneApiUrl } from "../control-plane-url.js";
 import {
   ErrorCodes,
   errorShape,
@@ -98,10 +99,6 @@ export function createExecApprovalHandlers(
       );
 
       const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
-      const controlPlaneUrl =
-        process.env.OPENCLAW_CONTROL_PLANE_URL ||
-        process.env.LAZZY_CONTROL_PLANE_URL ||
-        "https://gwal.ai";
 
       if (gatewayToken) {
         const commandPreview =
@@ -114,7 +111,7 @@ export function createExecApprovalHandlers(
           : "Approve command?";
         const message = record.request.ask || record.request.command.split("\n")[0].slice(0, 80);
 
-        fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+        fetch(buildControlPlaneApiUrl("/agent/live-activity/push"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -126,6 +123,7 @@ export function createExecApprovalHandlers(
             headline,
             message,
             commandText: commandPreview,
+            accessToken: gatewayToken,
           }),
         }).catch((err) => {
           context.logGateway?.error?.(`Failed to trigger live activity push: ${String(err)}`);
@@ -234,10 +232,6 @@ export function createExecApprovalHandlers(
       );
 
       const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
-      const controlPlaneUrl =
-        process.env.OPENCLAW_CONTROL_PLANE_URL ||
-        process.env.LAZZY_CONTROL_PLANE_URL ||
-        "https://gwal.ai";
 
       if (gatewayToken) {
         const headline = decision === "deny" ? "Command denied" : "Command approved";
@@ -248,7 +242,7 @@ export function createExecApprovalHandlers(
               ? "The command was denied."
               : "The command was approved.";
 
-        fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+        fetch(buildControlPlaneApiUrl("/agent/live-activity/push"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -260,6 +254,7 @@ export function createExecApprovalHandlers(
             headline,
             message,
             commandText: "",
+            accessToken: gatewayToken,
           }),
         }).catch((err) => {
           context.logGateway?.error?.(`Failed to trigger live activity push: ${String(err)}`);

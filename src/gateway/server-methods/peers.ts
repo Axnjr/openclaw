@@ -3,6 +3,7 @@ import path from "node:path";
 import type { GatewayRequestHandlers } from "./types.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { loadConfig } from "../../config/config.js";
+import { buildControlPlaneApiUrl } from "../control-plane-url.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 
 export const peersHandlers: GatewayRequestHandlers = {
@@ -64,13 +65,6 @@ export const peersHandlers: GatewayRequestHandlers = {
    */
   "group-chat.log": async ({ params, respond, context }) => {
     try {
-      // const controlPlaneUrl =
-      //   process.env.OPENCLAW_CONTROL_PLANE_URL ||
-      //   process.env.LAZZY_CONTROL_PLANE_URL ||
-      //   "https://gwal.ai";
-
-      const controlPlaneUrl = "https://gwal.ai";
-
       // const cfg = loadConfig();
       // Resolve the gateway token from the environment (set by lazzy-bootstrap.js)
       const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
@@ -92,7 +86,7 @@ export const peersHandlers: GatewayRequestHandlers = {
         sentAt: params.sentAt ?? new Date().toISOString(),
       };
 
-      const response = await fetch(`${controlPlaneUrl}/api/group-chat`, {
+      const response = await fetch(buildControlPlaneApiUrl("/group-chat"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

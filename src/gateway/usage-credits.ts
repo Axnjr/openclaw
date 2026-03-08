@@ -2,7 +2,7 @@ import type { OpenClawConfig } from "../config/config.js";
 import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "../agents/usage.js";
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
 
-const USD_PER_CREDIT = 0.01;
+const USD_PER_CREDIT = 0.001;
 const CREDITS_ROUNDING_SCALE = 10_000;
 
 type JsonRecord = Record<string, unknown>;

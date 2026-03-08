@@ -23,9 +23,9 @@ const OPENROUTER_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
     cacheRead: 0,
     cacheWrite: 0,
   },
-  "openai/gpt-5.3-codex": {
-    input: 1.75,
-    output: 14,
+  "openai/gpt-5.4": {
+    input: 3,
+    output: 16,
     cacheRead: 0,
     cacheWrite: 0,
   },

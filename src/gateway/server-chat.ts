@@ -9,6 +9,7 @@ import {
   loadAllApnsRegistrations,
   sendApnsAlert,
 } from "../infra/push-apns.js";
+import { buildControlPlaneApiUrl } from "./control-plane-url.js";
 import { loadSessionEntry } from "./session-utils.js";
 import {
   parseGatewayCreditsUsed,
@@ -474,18 +475,15 @@ export function createAgentEventHandler({
           void (async () => {
             try {
               const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || "";
-              const controlPlaneUrl =
-                process.env.OPENCLAW_CONTROL_PLANE_URL ||
-                process.env.LAZZY_CONTROL_PLANE_URL ||
-                "https://gwal.ai";
               if (!gatewayToken) {
                 return;
               }
               const agentName = process.env.OPENCLAW_AGENT_NAME || "Agent";
               const replyPreview = text.length > 200 ? text.slice(0, 197) + "..." : text;
               const approvalId = `reply-${sessionKey}-pending`;
+              const pushUrl = buildControlPlaneApiUrl("/agent/live-activity/push");
 
-              const res = await fetch(`${controlPlaneUrl}/api/agent/live-activity/push`, {
+              const res = await fetch(pushUrl, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -497,6 +495,7 @@ export function createAgentEventHandler({
                   headline: `${agentName} replied`,
                   message: replyPreview,
                   commandText: "",
+                  accessToken: gatewayToken,
                 }),
               });
               if (!res.ok) {
