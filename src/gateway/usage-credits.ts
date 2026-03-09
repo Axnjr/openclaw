@@ -208,10 +208,6 @@ export async function consumeBillingCredits(params: {
     console.log(`[BillingConsume] Failed: No OPENCLAW_GATEWAY_TOKEN found`);
     return;
   }
-  if (!params.domain) {
-    console.log(`[BillingConsume] Failed: No domain passed`);
-    return;
-  }
   if (params.creditsUsed <= 0) {
     console.log(`[BillingConsume] Skipped: creditsUsed (${params.creditsUsed}) <= 0`);
     return;
@@ -246,12 +242,14 @@ export async function checkBillingStatus(
   domain: string | undefined,
 ): Promise<{ canChat: boolean; error?: string }> {
   const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
-  if (!gatewayToken || !domain) {
-    return { canChat: true }; // Default to true if not configured or no domain
+  if (!gatewayToken) {
+    return { canChat: true }; // Default to true if not configured
   }
 
   try {
-    const url = buildControlPlaneApiUrl(`/billing/status?domain=${encodeURIComponent(domain)}`);
+    const url = buildControlPlaneApiUrl(
+      domain ? `/billing/status?domain=${encodeURIComponent(domain)}` : `/billing/status`,
+    );
     const res = await fetch(url, {
       method: "GET",
       headers: {
