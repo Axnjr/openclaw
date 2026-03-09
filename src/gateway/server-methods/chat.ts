@@ -22,6 +22,7 @@ import {
 } from "../chat-abort.js";
 import { type ChatImageContent, parseMessageWithAttachments } from "../chat-attachments.js";
 import { stripEnvelopeFromMessages } from "../chat-sanitize.js";
+import { buildControlPlaneApiUrl } from "../control-plane-url.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
 import {
   ErrorCodes,
@@ -591,6 +592,81 @@ function broadcastChatFinal(params: {
   params.context.broadcast("chat", payload);
   params.context.nodeSendToSession(params.sessionKey, "chat", payload);
   params.context.agentRunSeq.delete(params.runId);
+
+  if (creditsUsed > 0) {
+    consumeBillingCredits({
+      domain: process.env.OPENCLAW_GATEWAY_DOMAIN,
+      runId: params.runId,
+      creditsUsed,
+    }).catch((err) => {
+      params.context.logGateway.warn(
+        `[BillingConsume] Failed to consume credits for runId ${params.runId}: ${String(err)}`,
+      );
+    });
+  }
+}
+
+async function checkBillingStatus(
+  domain: string | undefined,
+): Promise<{ canChat: boolean; error?: string }> {
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+  if (!gatewayToken || !domain) {
+    return { canChat: true }; // Default to true if not configured or no domain
+  }
+
+  try {
+    const url = buildControlPlaneApiUrl(`/billing/status?domain=${encodeURIComponent(domain)}`);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${gatewayToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      return { canChat: false, error: `Billing API returned status: ${res.status}` };
+    }
+
+    const data = await res.json();
+    return {
+      canChat: data.canChat !== false,
+      error:
+        data.canChat === false
+          ? "Insufficient credits or active subscription required to chat."
+          : undefined,
+    };
+  } catch (err) {
+    return { canChat: false, error: `Billing API error: ${String(err)}` };
+  }
+}
+
+async function consumeBillingCredits(params: {
+  domain: string | undefined;
+  runId: string;
+  creditsUsed: number;
+}): Promise<void> {
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+  if (!gatewayToken || !params.domain || params.creditsUsed <= 0) {
+    return;
+  }
+
+  try {
+    const url = buildControlPlaneApiUrl("/billing/consume");
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${gatewayToken}`,
+      },
+      body: JSON.stringify({
+        domain: params.domain,
+        runId: params.runId,
+        creditsUsed: params.creditsUsed,
+      }),
+    });
+  } catch (err) {
+    console.warn(`[BillingConsume] Request error: ${String(err)}`);
+  }
 }
 
 function broadcastChatError(params: {
@@ -835,6 +911,20 @@ export const chatHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(ErrorCodes.INVALID_REQUEST, "send blocked by session policy"),
+      );
+      return;
+    }
+
+    // Pre-flight check billing credits
+    const billingStatus = await checkBillingStatus(process.env.OPENCLAW_GATEWAY_DOMAIN);
+    if (!billingStatus.canChat) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          billingStatus.error || "Insufficient credits or active subscription required to chat.",
+        ),
       );
       return;
     }
