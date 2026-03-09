@@ -6,7 +6,7 @@ import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { buildModelAliasLines } from "../model-alias-lines.js";
 import { normalizeModelCompat } from "../model-compat.js";
 import { resolveForwardCompatModel } from "../model-forward-compat.js";
-import { normalizeProviderId } from "../model-selection.js";
+import { findNormalizedProviderValue, normalizeProviderId } from "../model-selection.js";
 import {
   discoverAuthStorage,
   discoverModels,
@@ -19,6 +19,18 @@ type InlineProviderConfig = {
   baseUrl?: string;
   api?: ModelDefinitionConfig["api"];
   models?: ModelDefinitionConfig[];
+};
+
+const XAI_MODEL_ALIASES: Record<string, string> = {
+  "grok-4-1-fast": "grok-4.1-fast",
+};
+
+const MINIMAX_MODEL_ALIASES: Record<string, string> = {
+  "minimax-m2.1": "MiniMax-M2.1",
+  "minimax-m2.1-lightning": "MiniMax-M2.1-lightning",
+  "minimax-vl-01": "MiniMax-VL-01",
+  "minimax-m2.5": "MiniMax-M2.5",
+  "minimax-m2.5-lightning": "MiniMax-M2.5-Lightning",
 };
 
 export { buildModelAliasLines };
@@ -40,6 +52,40 @@ export function buildInlineProviderModels(
   });
 }
 
+function normalizeModelIdForProvider(provider: string, modelId: string): string {
+  const trimmed = modelId.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (provider === "xai") {
+    return XAI_MODEL_ALIASES[lower] ?? trimmed;
+  }
+  if (provider === "minimax" || provider === "minimax-cn" || provider === "minimax-portal") {
+    return MINIMAX_MODEL_ALIASES[lower] ?? trimmed;
+  }
+  return trimmed;
+}
+
+function normalizeRequestedProviderModel(
+  provider: string,
+  modelId: string,
+): {
+  provider: string;
+  modelId: string;
+} {
+  const providerTrimmed = provider.trim();
+  const modelTrimmed = modelId.trim();
+
+  // Recover from malformed provider values accidentally containing a model id:
+  // "xai/grok-4.1-fast" + "grok-4.1-fast" -> provider "xai".
+  const slash = providerTrimmed.indexOf("/");
+  const providerBase = slash > 0 ? providerTrimmed.slice(0, slash) : providerTrimmed;
+  const normalizedProvider = normalizeProviderId(providerBase);
+  const normalizedModelId = normalizeModelIdForProvider(normalizedProvider, modelTrimmed);
+  return { provider: normalizedProvider, modelId: normalizedModelId };
+}
+
 export function resolveModel(
   provider: string,
   modelId: string,
@@ -54,13 +100,17 @@ export function resolveModel(
   const resolvedAgentDir = agentDir ?? resolveOpenClawAgentDir();
   const authStorage = discoverAuthStorage(resolvedAgentDir);
   const modelRegistry = discoverModels(authStorage, resolvedAgentDir);
-  const model = modelRegistry.find(provider, modelId) as Model<Api> | null;
+  const requested = normalizeRequestedProviderModel(provider, modelId);
+  const model = modelRegistry.find(requested.provider, requested.modelId) as Model<Api> | null;
   if (!model) {
     const providers = cfg?.models?.providers ?? {};
     const inlineModels = buildInlineProviderModels(providers);
-    const normalizedProvider = normalizeProviderId(provider);
+    const normalizedProvider = requested.provider;
+    const normalizedModelId = requested.modelId;
     const inlineMatch = inlineModels.find(
-      (entry) => normalizeProviderId(entry.provider) === normalizedProvider && entry.id === modelId,
+      (entry) =>
+        normalizeProviderId(entry.provider) === normalizedProvider &&
+        normalizeModelIdForProvider(normalizedProvider, entry.id) === normalizedModelId,
     );
     if (inlineMatch) {
       const normalized = normalizeModelCompat(inlineMatch as Model<Api>);
@@ -72,17 +122,21 @@ export function resolveModel(
     }
     // Forward-compat fallbacks must be checked BEFORE the generic providerCfg fallback.
     // Otherwise, configured providers can default to a generic API and break specific transports.
-    const forwardCompat = resolveForwardCompatModel(provider, modelId, modelRegistry);
+    const forwardCompat = resolveForwardCompatModel(
+      normalizedProvider,
+      normalizedModelId,
+      modelRegistry,
+    );
     if (forwardCompat) {
       return { model: forwardCompat, authStorage, modelRegistry };
     }
-    const providerCfg = providers[provider];
-    if (providerCfg || modelId.startsWith("mock-")) {
+    const providerCfg = findNormalizedProviderValue(providers, normalizedProvider);
+    if (providerCfg || normalizedModelId.startsWith("mock-")) {
       const fallbackModel: Model<Api> = normalizeModelCompat({
-        id: modelId,
-        name: modelId,
+        id: normalizedModelId,
+        name: normalizedModelId,
         api: providerCfg?.api ?? "openai-responses",
-        provider,
+        provider: normalizedProvider,
         baseUrl: providerCfg?.baseUrl,
         reasoning: false,
         input: ["text"],
@@ -93,7 +147,7 @@ export function resolveModel(
       return { model: fallbackModel, authStorage, modelRegistry };
     }
     return {
-      error: buildUnknownModelError(provider, modelId),
+      error: buildUnknownModelError(normalizedProvider, normalizedModelId),
       authStorage,
       modelRegistry,
     };

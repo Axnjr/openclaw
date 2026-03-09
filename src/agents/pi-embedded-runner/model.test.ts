@@ -170,6 +170,75 @@ describe("resolveModel", () => {
     expect(result.model?.id).toBe("missing-model");
   });
 
+  it("normalizes malformed provider values that include a model segment", () => {
+    const cfg = {
+      models: {
+        providers: {
+          xai: {
+            baseUrl: "https://api.x.ai/v1",
+            api: "openai-completions",
+            models: [makeModel("grok-4.1-fast")],
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    const result = resolveModel("xai/grok-4.1-fasti", "grok-4.1-fast", "/tmp/agent", cfg);
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "xai",
+      id: "grok-4.1-fast",
+      baseUrl: "https://api.x.ai/v1",
+    });
+  });
+
+  it("normalizes minimax lowercase ids to canonical model ids", () => {
+    const cfg = {
+      models: {
+        providers: {
+          minimax: {
+            baseUrl: "https://api.minimax.io/anthropic",
+            api: "anthropic-messages",
+            models: [makeModel("MiniMax-M2.5")],
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    const result = resolveModel("minimax", "minimax-m2.5", "/tmp/agent", cfg);
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "minimax",
+      id: "MiniMax-M2.5",
+      baseUrl: "https://api.minimax.io/anthropic",
+    });
+  });
+
+  it("normalizes xai grok dash aliases to canonical ids", () => {
+    const cfg = {
+      models: {
+        providers: {
+          xai: {
+            baseUrl: "https://api.x.ai/v1",
+            api: "openai-completions",
+            models: [makeModel("grok-4.1-fast")],
+          },
+        },
+      },
+    } as OpenClawConfig;
+
+    const result = resolveModel("xai", "grok-4-1-fast", "/tmp/agent", cfg);
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "xai",
+      id: "grok-4.1-fast",
+      baseUrl: "https://api.x.ai/v1",
+    });
+  });
+
   it("builds an openai-codex fallback for gpt-5.3-codex", () => {
     mockDiscoveredModel({
       provider: "openai-codex",
