@@ -599,7 +599,10 @@ function broadcastChatFinal(params: {
       runId: params.runId,
       creditsUsed,
     }).catch((err) => {
-      params.context.logGateway.warn(
+      // params.context.logGateway.warn(
+      //   `[BillingConsume] Failed to consume credits for runId ${params.runId}: ${String(err)}`,
+      // );
+      console.warn(
         `[BillingConsume] Failed to consume credits for runId ${params.runId}: ${String(err)}`,
       );
     });
