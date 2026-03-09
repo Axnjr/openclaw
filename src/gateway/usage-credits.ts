@@ -201,14 +201,27 @@ export async function consumeBillingCredits(params: {
   runId: string;
   creditsUsed: number;
 }): Promise<void> {
+  console.log(`[BillingConsume] Request initialized:`, params);
   const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
-  if (!gatewayToken || !params.domain || params.creditsUsed <= 0) {
+
+  if (!gatewayToken) {
+    console.log(`[BillingConsume] Failed: No OPENCLAW_GATEWAY_TOKEN found`);
+    return;
+  }
+  if (!params.domain) {
+    console.log(`[BillingConsume] Failed: No domain passed`);
+    return;
+  }
+  if (params.creditsUsed <= 0) {
+    console.log(`[BillingConsume] Skipped: creditsUsed (${params.creditsUsed}) <= 0`);
     return;
   }
 
   try {
     const url = buildControlPlaneApiUrl("/billing/consume");
-    await fetch(url, {
+    console.log(`[BillingConsume] URL Built: ${url}`);
+
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -220,6 +233,10 @@ export async function consumeBillingCredits(params: {
         creditsUsed: params.creditsUsed,
       }),
     });
+
+    console.log(`[BillingConsume] Response Status: ${response.status} ${response.statusText}`);
+    const responseBody = await response.text();
+    console.log(`[BillingConsume] Response Body: ${responseBody}`);
   } catch (err) {
     console.warn(`[BillingConsume] Request error: ${String(err)}`);
   }
