@@ -16,6 +16,7 @@ import {
   resolveGatewayUsageWithCredits,
   roundGatewayCredits,
   withUsageCredits,
+  consumeBillingCredits,
 } from "./usage-credits.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -418,6 +419,18 @@ export function createAgentEventHandler({
         broadcast("chat", payload);
       }
       nodeSendToSession(sessionKey, "chat", payload);
+
+      if (creditsUsed > 0) {
+        consumeBillingCredits({
+          domain: process.env.OPENCLAW_GATEWAY_DOMAIN,
+          runId: clientRunId,
+          creditsUsed,
+        }).catch((err) => {
+          console.warn(
+            `[BillingConsume] Failed to consume credits for runId ${clientRunId}: ${String(err)}`,
+          );
+        });
+      }
 
       if (text && !shouldSuppressSilent) {
         setImmediate(() => {

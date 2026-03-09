@@ -1,8 +1,9 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "../agents/usage.js";
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
+import { buildControlPlaneApiUrl } from "./control-plane-url.js";
 
-const USD_PER_CREDIT = 0.001;
+const USD_PER_CREDIT = 0.01;
 const CREDITS_ROUNDING_SCALE = 10_000;
 
 type JsonRecord = Record<string, unknown>;
@@ -193,4 +194,67 @@ export function resolveGatewayUsageWithCredits(params: {
   }
 
   return { usage, costUsd, creditsUsed };
+}
+
+export async function consumeBillingCredits(params: {
+  domain: string | undefined;
+  runId: string;
+  creditsUsed: number;
+}): Promise<void> {
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+  if (!gatewayToken || !params.domain || params.creditsUsed <= 0) {
+    return;
+  }
+
+  try {
+    const url = buildControlPlaneApiUrl("/billing/consume");
+    await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${gatewayToken}`,
+      },
+      body: JSON.stringify({
+        domain: params.domain,
+        runId: params.runId,
+        creditsUsed: params.creditsUsed,
+      }),
+    });
+  } catch (err) {
+    console.warn(`[BillingConsume] Request error: ${String(err)}`);
+  }
+}
+
+export async function checkBillingStatus(
+  domain: string | undefined,
+): Promise<{ canChat: boolean; error?: string }> {
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+  if (!gatewayToken || !domain) {
+    return { canChat: true }; // Default to true if not configured or no domain
+  }
+
+  try {
+    const url = buildControlPlaneApiUrl(`/billing/status?domain=${encodeURIComponent(domain)}`);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${gatewayToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      return { canChat: false, error: `Billing API returned status: ${res.status}` };
+    }
+
+    const data = await res.json();
+    return {
+      canChat: data.canChat !== false,
+      error:
+        data.canChat === false
+          ? "Insufficient credits or active subscription required to chat."
+          : undefined,
+    };
+  } catch (err) {
+    return { canChat: false, error: `Billing API error: ${String(err)}` };
+  }
 }
