@@ -46,6 +46,12 @@ export function normalizeProviderId(provider: string): string {
   if (normalized === "kimi-code") {
     return "kimi-coding";
   }
+  if (normalized === "x-ai") {
+    return "xai";
+  }
+  if (normalized === "moonshotai") {
+    return "moonshot";
+  }
   return normalized;
 }
 

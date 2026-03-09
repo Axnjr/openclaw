@@ -620,6 +620,57 @@ export function buildQianfanProvider(): ProviderConfig {
   };
 }
 
+export function buildXaiProvider(): ProviderConfig {
+  return {
+    baseUrl: "https://api.x.ai/v1",
+    api: "openai-completions",
+    models: [
+      {
+        id: "grok-beta",
+        name: "Grok Beta",
+        reasoning: false,
+        input: ["text"],
+        cost: {
+          input: 5,
+          output: 15,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        contextWindow: 131072,
+        maxTokens: 8192,
+      },
+      {
+        id: "grok-vision-beta",
+        name: "Grok Vision Beta",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: {
+          input: 5,
+          output: 15,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        contextWindow: 8192,
+        maxTokens: 8192,
+      },
+      {
+        id: "grok-4.1-fast",
+        name: "Grok-4.1 Fast",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        contextWindow: 131072,
+        maxTokens: 8192,
+      },
+    ],
+  };
+}
+
 export function buildNvidiaProvider(): ProviderConfig {
   return {
     baseUrl: NVIDIA_BASE_URL,
@@ -805,6 +856,13 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "nvidia", store: authStore });
   if (nvidiaKey) {
     providers.nvidia = { ...buildNvidiaProvider(), apiKey: nvidiaKey };
+  }
+
+  const xaiKey =
+    resolveEnvApiKeyVarName("xai") ??
+    resolveApiKeyFromProfiles({ provider: "xai", store: authStore });
+  if (xaiKey) {
+    providers.xai = { ...buildXaiProvider(), apiKey: xaiKey };
   }
 
   return providers;
