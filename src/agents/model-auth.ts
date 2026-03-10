@@ -26,13 +26,6 @@ const AWS_ACCESS_KEY_ENV = "AWS_ACCESS_KEY_ID";
 const AWS_SECRET_KEY_ENV = "AWS_SECRET_ACCESS_KEY";
 const AWS_PROFILE_ENV = "AWS_PROFILE";
 
-function isHostedGoogleProxyEnabled(env: NodeJS.ProcessEnv): boolean {
-  return Boolean(
-    normalizeOptionalSecretInput(env.OPENCLAW_GATEWAY_TOKEN) &&
-    normalizeOptionalSecretInput(env.OPENCLAW_SECRET_PROXY_URL),
-  );
-}
-
 function resolveProviderConfig(
   cfg: OpenClawConfig | undefined,
   provider: string,
@@ -309,10 +302,6 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
 
   if (normalized === "opencode") {
     return pick("OPENCODE_API_KEY") ?? pick("OPENCODE_ZEN_API_KEY");
-  }
-
-  if (normalized === "google" && isHostedGoogleProxyEnabled(process.env)) {
-    return pick("OPENCLAW_GATEWAY_TOKEN");
   }
 
   if (normalized === "qwen-portal") {
