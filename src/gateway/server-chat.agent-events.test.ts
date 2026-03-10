@@ -1,10 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerAgentRunContext, resetAgentRunContextForTest } from "../infra/agent-events.js";
 import {
   createAgentEventHandler,
   createChatRunState,
   createToolEventRecipientRegistry,
 } from "./server-chat.js";
+
+afterEach(() => {
+  delete process.env.OPENCLAW_GATEWAY_TOKEN;
+  resetAgentRunContextForTest();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("agent event handler", () => {
   function createHarness(params?: {
@@ -176,6 +183,136 @@ describe("agent event handler", () => {
     expect(payload.credits_used).toBe(12.5);
     expect(payload.usage?.creditsUsed).toBe(12.5);
     expect(payload.usage?.credits_used).toBe(12.5);
+    nowSpy?.mockRestore();
+  });
+
+  it("includes byok authMode in final payload and skips billing consume", () => {
+    process.env.OPENCLAW_GATEWAY_TOKEN = "test-gateway-token";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { broadcast, nodeSendToSession, chatRunState, handler, nowSpy } = createHarness({
+      now: 2_325,
+    });
+    chatRunState.registry.add("run-byok", {
+      sessionKey: "session-byok",
+      clientRunId: "client-byok",
+    });
+    registerAgentRunContext("run-byok", { sessionKey: "session-byok", authMode: "byok" });
+
+    handler({
+      runId: "run-byok",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "done" },
+    });
+    handler({
+      runId: "run-byok",
+      seq: 2,
+      stream: "lifecycle",
+      ts: Date.now(),
+      data: { phase: "end", creditsUsed: 7 },
+    });
+
+    const finalCalls = chatBroadcastCalls(broadcast).filter(([, payload]) => {
+      return (payload as { state?: string }).state === "final";
+    });
+    expect(finalCalls).toHaveLength(1);
+    const payload = finalCalls[0]?.[1] as { authMode?: string };
+    expect(payload.authMode).toBe("byok");
+
+    const sessionCalls = sessionChatCalls(nodeSendToSession).filter(([, , payload]) => {
+      return (payload as { state?: string }).state === "final";
+    });
+    expect(sessionCalls).toHaveLength(1);
+    const sessionPayload = sessionCalls[0]?.[2] as { authMode?: string };
+    expect(sessionPayload.authMode).toBe("byok");
+
+    const billingCalls = broadcast.mock.calls.filter(([event]) => event === "billing.update");
+    expect(billingCalls).toHaveLength(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    nowSpy?.mockRestore();
+  });
+
+  it("emits billing.update after hosted credit consumption succeeds", async () => {
+    process.env.OPENCLAW_GATEWAY_TOKEN = "test-gateway-token";
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          appliedCredits: 12.5,
+          creditsRemaining: 87.5,
+          canChat: true,
+          billingReason: "ok",
+          idempotencyKey: "credit:client-hosted",
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { broadcast, nodeSendToSession, chatRunState, handler, nowSpy } = createHarness({
+      now: 2_350,
+    });
+    chatRunState.registry.add("run-hosted", {
+      sessionKey: "session-hosted",
+      clientRunId: "client-hosted",
+    });
+    registerAgentRunContext("run-hosted", {
+      sessionKey: "session-hosted",
+      authMode: "hosted",
+    });
+
+    handler({
+      runId: "run-hosted",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "done" },
+    });
+    handler({
+      runId: "run-hosted",
+      seq: 2,
+      stream: "lifecycle",
+      ts: Date.now(),
+      data: { phase: "end", creditsUsed: 12.5 },
+    });
+
+    await vi.waitFor(() => {
+      const billingCalls = broadcast.mock.calls.filter(([event]) => event === "billing.update");
+      expect(billingCalls).toHaveLength(1);
+    });
+
+    const billingCalls = broadcast.mock.calls.filter(([event]) => event === "billing.update");
+    const payload = billingCalls[0]?.[1] as {
+      runId?: string;
+      authMode?: string;
+      ok?: boolean;
+      creditsRemaining?: number;
+      canChat?: boolean;
+      billingReason?: string;
+      appliedCredits?: number;
+      source?: string;
+    };
+    expect(payload).toMatchObject({
+      runId: "client-hosted",
+      authMode: "hosted",
+      ok: true,
+      creditsRemaining: 87.5,
+      canChat: true,
+      billingReason: "ok",
+      appliedCredits: 12.5,
+      source: "consume_ack",
+    });
+
+    const nodeBillingCalls = nodeSendToSession.mock.calls.filter(
+      ([, event]) => event === "billing.update",
+    );
+    expect(nodeBillingCalls).toHaveLength(1);
+    const billingFetchCalls = fetchMock.mock.calls.filter(([url]) => {
+      return typeof url === "string" && url.includes("/billing/consume");
+    });
+    expect(billingFetchCalls).toHaveLength(1);
     nowSpy?.mockRestore();
   });
 

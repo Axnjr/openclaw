@@ -1,6 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthProfileStore } from "./auth-profiles.js";
-import { requireApiKey, resolveAwsSdkEnvVarName, resolveModelAuthMode } from "./model-auth.js";
+import {
+  requireApiKey,
+  resolveApiKeyForProvider,
+  resolveAwsSdkEnvVarName,
+  resolveModelAuthMode,
+} from "./model-auth.js";
+import { resetHostedAgentSecretCacheForTests } from "./secret-proxy.js";
+
+const previousSecretProxyUrl = process.env.OPENCLAW_SECRET_PROXY_URL;
+const previousGatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetHostedAgentSecretCacheForTests();
+  if (previousSecretProxyUrl === undefined) {
+    delete process.env.OPENCLAW_SECRET_PROXY_URL;
+  } else {
+    process.env.OPENCLAW_SECRET_PROXY_URL = previousSecretProxyUrl;
+  }
+  if (previousGatewayToken === undefined) {
+    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+  } else {
+    process.env.OPENCLAW_GATEWAY_TOKEN = previousGatewayToken;
+  }
+});
 
 describe("resolveAwsSdkEnvVarName", () => {
   it("prefers bearer token over access keys and profile", () => {
@@ -103,5 +127,36 @@ describe("requireApiKey", () => {
         "openai",
       ),
     ).toThrow('No API key resolved for provider "openai"');
+  });
+});
+
+describe("secret proxy auth", () => {
+  it("resolves hosted provider keys from the secret proxy", async () => {
+    process.env.OPENCLAW_SECRET_PROXY_URL = "https://control.example.com/api/agent/secrets";
+    process.env.OPENCLAW_GATEWAY_TOKEN = "gateway-token";
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            secrets: {
+              OPENAI_API_KEY: "proxied-openai-key",
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const resolved = await resolveApiKeyForProvider({
+      provider: "openai",
+      store: { version: 1, profiles: {} },
+    });
+
+    expect(resolved.apiKey).toBe("proxied-openai-key");
+    expect(resolved.source).toBe("secret-proxy: OPENAI_API_KEY");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

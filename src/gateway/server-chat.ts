@@ -17,6 +17,7 @@ import {
   roundGatewayCredits,
   withUsageCredits,
   consumeBillingCredits,
+  type ConsumeBillingCreditsResult,
 } from "./usage-credits.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -58,6 +59,21 @@ type TerminalUsageSnapshot = {
   explicitCredits?: number;
   costUsd?: number;
 };
+
+type RunAuthMode = "hosted" | "byok";
+
+function resolveRunAuthMode(...runIds: Array<string | undefined>): RunAuthMode {
+  for (const runId of runIds) {
+    if (!runId) {
+      continue;
+    }
+    const authMode = getAgentRunContext(runId)?.authMode;
+    if (authMode === "hosted" || authMode === "byok") {
+      return authMode;
+    }
+  }
+  return "hosted";
+}
 
 function asRecord(value: unknown): JsonRecord | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -363,6 +379,27 @@ export function createAgentEventHandler({
     nodeSendToSession(sessionKey, "chat", payload);
   };
 
+  const emitBillingUpdate = (params: {
+    sessionKey: string;
+    runId: string;
+    authMode: RunAuthMode;
+    result: ConsumeBillingCreditsResult;
+  }) => {
+    const payload = {
+      runId: params.runId,
+      sessionKey: params.sessionKey,
+      authMode: params.authMode,
+      ok: params.result.ok,
+      creditsRemaining: params.result.creditsRemaining ?? undefined,
+      canChat: params.result.canChat ?? undefined,
+      billingReason: params.result.billingReason ?? undefined,
+      appliedCredits: params.result.appliedCredits,
+      source: "consume_ack" as const,
+    };
+    broadcast("billing.update", payload);
+    nodeSendToSession(params.sessionKey, "billing.update", payload);
+  };
+
   const emitChatFinal = (
     sessionKey: string,
     clientRunId: string,
@@ -373,6 +410,7 @@ export function createAgentEventHandler({
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
     const shouldSuppressSilent = isSilentReplyText(text, SILENT_REPLY_TOKEN);
+    const authMode = resolveRunAuthMode(sourceRunId, clientRunId);
     const terminalUsage =
       chatRunState.terminalUsageByRun.get(sourceRunId) ??
       chatRunState.terminalUsageByRun.get(clientRunId);
@@ -404,6 +442,7 @@ export function createAgentEventHandler({
         usage: usageWithCredits,
         creditsUsed,
         credits_used: creditsUsed,
+        authMode,
         message:
           text && !shouldSuppressSilent
             ? {
@@ -420,16 +459,40 @@ export function createAgentEventHandler({
       }
       nodeSendToSession(sessionKey, "chat", payload);
 
-      if (creditsUsed > 0) {
-        consumeBillingCredits({
+      if (authMode === "hosted" && creditsUsed > 0) {
+        void consumeBillingCredits({
           domain: process.env.OPENCLAW_GATEWAY_DOMAIN,
           runId: clientRunId,
           creditsUsed,
-        }).catch((err) => {
-          console.warn(
-            `[BillingConsume] Failed to consume credits for runId ${clientRunId}: ${String(err)}`,
-          );
-        });
+        })
+          .then((result) => {
+            emitBillingUpdate({
+              sessionKey,
+              runId: clientRunId,
+              authMode,
+              result,
+            });
+          })
+          .catch((err) => {
+            console.warn(
+              `[BillingConsume] Failed to consume credits for runId ${clientRunId}: ${String(err)}`,
+            );
+            emitBillingUpdate({
+              sessionKey,
+              runId: clientRunId,
+              authMode,
+              result: {
+                ok: false,
+                appliedCredits: 0,
+                creditsRemaining: null,
+                canChat: null,
+                billingReason: null,
+                idempotencyKey: null,
+                statusCode: null,
+                retryable: true,
+              },
+            });
+          });
       }
 
       if (text && !shouldSuppressSilent) {

@@ -21,6 +21,7 @@ import {
 import { loadConfig } from "../config/config.js";
 import { safeEqualSecret } from "../security/secret-equal.js";
 import { handleSlackHttpRequest } from "../slack/http/index.js";
+import { handleAdminConfigRequest } from "./admin-config.js";
 import {
   authorizeGatewayConnect,
   isLocalDirectRequest,
@@ -508,6 +509,9 @@ export function createGatewayHttpServer(opts: {
       }
       const requestPath = new URL(req.url ?? "/", "http://localhost").pathname;
       if (await handleHooksRequest(req, res)) {
+        return;
+      }
+      if (await handleAdminConfigRequest(req, res)) {
         return;
       }
       if (await handleEnvVarRequest(req, res, { resolvedAuth })) {

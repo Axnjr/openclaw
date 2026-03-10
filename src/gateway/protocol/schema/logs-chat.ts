@@ -40,6 +40,7 @@ export const ChatSendParamsSchema = Type.Object(
     attachments: Type.Optional(Type.Array(Type.Unknown())),
     timeoutMs: Type.Optional(Type.Integer({ minimum: 0 })),
     idempotencyKey: NonEmptyString,
+    authMode: Type.Optional(Type.Union([Type.Literal("hosted"), Type.Literal("byok")])),
   },
   { additionalProperties: false },
 );
@@ -77,6 +78,7 @@ export const ChatEventSchema = Type.Object(
     usage: Type.Optional(Type.Unknown()),
     creditsUsed: Type.Optional(Type.Number({ minimum: 0 })),
     credits_used: Type.Optional(Type.Number({ minimum: 0 })),
+    authMode: Type.Optional(Type.Union([Type.Literal("hosted"), Type.Literal("byok")])),
     stopReason: Type.Optional(Type.String()),
   },
   { additionalProperties: false },

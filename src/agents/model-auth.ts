@@ -1,8 +1,8 @@
-import path from "node:path";
 import { type Api, getEnvApiKey, type Model } from "@mariozechner/pi-ai";
-import { formatCliCommand } from "../cli/command-format.js";
+import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelProviderAuthMode, ModelProviderConfig } from "../config/types.js";
+import { formatCliCommand } from "../cli/command-format.js";
 import { getShellEnvAppliedKeys } from "../infra/shell-env.js";
 import {
   normalizeOptionalSecretInput,
@@ -17,6 +17,7 @@ import {
   resolveAuthStorePathForDisplay,
 } from "./auth-profiles.js";
 import { normalizeProviderId } from "./model-selection.js";
+import { fetchHostedAgentSecret, type HostedAgentSecretName } from "./secret-proxy.js";
 
 export { ensureAuthProfileStore, resolveAuthProfileOrder } from "./auth-profiles.js";
 
@@ -24,6 +25,13 @@ const AWS_BEARER_ENV = "AWS_BEARER_TOKEN_BEDROCK";
 const AWS_ACCESS_KEY_ENV = "AWS_ACCESS_KEY_ID";
 const AWS_SECRET_KEY_ENV = "AWS_SECRET_ACCESS_KEY";
 const AWS_PROFILE_ENV = "AWS_PROFILE";
+
+function isHostedGoogleProxyEnabled(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    normalizeOptionalSecretInput(env.OPENCLAW_GATEWAY_TOKEN) &&
+    normalizeOptionalSecretInput(env.OPENCLAW_SECRET_PROXY_URL),
+  );
+}
 
 function resolveProviderConfig(
   cfg: OpenClawConfig | undefined,
@@ -202,6 +210,15 @@ export async function resolveApiKeyForProvider(params: {
     };
   }
 
+  const hostedSecretResolved = await resolveHostedProxyApiKey(provider);
+  if (hostedSecretResolved) {
+    return {
+      apiKey: hostedSecretResolved.apiKey,
+      source: hostedSecretResolved.source,
+      mode: "api-key",
+    };
+  }
+
   const customKey = getCustomProviderApiKey(cfg, provider);
   if (customKey) {
     return { apiKey: customKey, source: "models.json", mode: "api-key" };
@@ -234,6 +251,25 @@ export async function resolveApiKeyForProvider(params: {
 
 export type EnvApiKeyResult = { apiKey: string; source: string };
 export type ModelAuthMode = "api-key" | "oauth" | "token" | "mixed" | "aws-sdk" | "unknown";
+
+function resolveHostedSecretNameForProvider(provider: string): HostedAgentSecretName | null {
+  const normalized = normalizeProviderId(provider);
+  const envMap: Partial<Record<string, HostedAgentSecretName>> = {
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    google: "GEMINI_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
+    xai: "XAI_API_KEY",
+    grok: "XAI_API_KEY",
+    kimi: "KIMI_API_KEY",
+    "kimi-coding": "KIMI_API_KEY",
+    minimax: "MINIMAX_API_KEY",
+    "minimax-portal": "MINIMAX_API_KEY",
+    qwen: "QWEN_PORTAL_API_KEY",
+    "qwen-portal": "QWEN_PORTAL_API_KEY",
+  };
+  return envMap[normalized] ?? null;
+}
 
 export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   const normalized = normalizeProviderId(provider);
@@ -273,6 +309,10 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
 
   if (normalized === "opencode") {
     return pick("OPENCODE_API_KEY") ?? pick("OPENCODE_ZEN_API_KEY");
+  }
+
+  if (normalized === "google" && isHostedGoogleProxyEnabled(process.env)) {
+    return pick("OPENCLAW_GATEWAY_TOKEN");
   }
 
   if (normalized === "qwen-portal") {
@@ -323,6 +363,21 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   return pick(envVar);
 }
 
+async function resolveHostedProxyApiKey(provider: string): Promise<EnvApiKeyResult | null> {
+  const secretName = resolveHostedSecretNameForProvider(provider);
+  if (!secretName) {
+    return null;
+  }
+  const apiKey = await fetchHostedAgentSecret(secretName);
+  if (!apiKey) {
+    return null;
+  }
+  return {
+    apiKey,
+    source: `secret-proxy: ${secretName}`,
+  };
+}
+
 export function resolveModelAuthMode(
   provider?: string,
   cfg?: OpenClawConfig,
@@ -370,6 +425,13 @@ export function resolveModelAuthMode(
   const envKey = resolveEnvApiKey(resolved);
   if (envKey?.apiKey) {
     return envKey.source.includes("OAUTH_TOKEN") ? "oauth" : "api-key";
+  }
+
+  if (
+    resolveHostedSecretNameForProvider(resolved) &&
+    process.env.OPENCLAW_SECRET_PROXY_URL?.trim()
+  ) {
+    return "api-key";
   }
 
   if (getCustomProviderApiKey(cfg, resolved)) {

@@ -10,6 +10,7 @@ import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
+import { getAgentRunContext, registerAgentRunContext } from "../../infra/agent-events.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import {
@@ -570,6 +571,7 @@ function broadcastChatFinal(params: {
   const usage = ensureChatFinalUsage(messageUsage, creditsUsed);
   const message = params.message ? { ...params.message, usage } : undefined;
   const seq = nextChatSeq({ agentRunSeq: params.context.agentRunSeq }, params.runId);
+  const authMode = getAgentRunContext(params.runId)?.authMode ?? "hosted";
   const payload = {
     runId: params.runId,
     sessionKey: params.sessionKey,
@@ -579,6 +581,7 @@ function broadcastChatFinal(params: {
     usage,
     creditsUsed,
     credits_used: creditsUsed,
+    authMode,
   };
   debugGatewayCredits("chat_methods_final_emit", {
     runId: params.runId,
@@ -778,6 +781,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       }>;
       timeoutMs?: number;
       idempotencyKey: string;
+      authMode?: "hosted" | "byok";
     };
     const sanitizedMessageResult = sanitizeChatSendMessageInput(p.message);
     if (!sanitizedMessageResult.ok) {
@@ -823,6 +827,11 @@ export const chatHandlers: GatewayRequestHandlers = {
     });
     const now = Date.now();
     const clientRunId = p.idempotencyKey;
+    const runtimeAuthMode = p.authMode === "byok" ? "byok" : "hosted";
+    registerAgentRunContext(clientRunId, {
+      sessionKey,
+      authMode: runtimeAuthMode,
+    });
 
     const sendPolicy = resolveSendPolicy({
       cfg,
@@ -840,18 +849,20 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // Pre-flight check billing credits
-    const billingStatus = await checkBillingStatus(process.env.OPENCLAW_GATEWAY_DOMAIN);
-    if (!billingStatus.canChat) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          billingStatus.error || "Insufficient credits or active subscription required to chat.",
-        ),
-      );
-      return;
+    if (runtimeAuthMode === "hosted") {
+      // Pre-flight check billing credits only for hosted runs.
+      const billingStatus = await checkBillingStatus(process.env.OPENCLAW_GATEWAY_DOMAIN);
+      if (!billingStatus.canChat) {
+        respond(
+          false,
+          undefined,
+          errorShape(
+            ErrorCodes.INVALID_REQUEST,
+            billingStatus.error || "Insufficient credits or active subscription required to chat.",
+          ),
+        );
+        return;
+      }
     }
 
     if (stopCommand) {
@@ -966,6 +977,10 @@ export const chatHandlers: GatewayRequestHandlers = {
           images: parsedImages.length > 0 ? parsedImages : undefined,
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
+            registerAgentRunContext(runId, {
+              sessionKey,
+              authMode: runtimeAuthMode,
+            });
             const connId = typeof client?.connId === "string" ? client.connId : undefined;
             const wantsToolEvents = hasGatewayClientCap(
               client?.connect?.caps,
