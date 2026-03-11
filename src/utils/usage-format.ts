@@ -48,14 +48,29 @@ const OPENROUTER_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
     cacheWrite: 0,
   },
   "google/gemini-3.1-pro-preview-customtools": {
-    input: 2,
-    output: 12,
+    input: 3,
+    output: 13,
     cacheRead: 0,
     cacheWrite: 0,
   },
   "google/gemini-3.1-pro-preview": {
-    input: 2,
-    output: 12,
+    input: 3,
+    output: 13,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+};
+
+const GOOGLE_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
+  "gemini-3.1-pro-preview-customtools": {
+    input: 3,
+    output: 13,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  "gemini-3.1-pro-preview": {
+    input: 3,
+    output: 13,
     cacheRead: 0,
     cacheWrite: 0,
   },
@@ -65,6 +80,14 @@ function normalizeOpenRouterCostLookupModelId(model: string): string {
   const trimmed = model.trim();
   if (trimmed.startsWith("openrouter/")) {
     return trimmed.slice("openrouter/".length);
+  }
+  return trimmed;
+}
+
+function normalizeGoogleCostLookupModelId(model: string): string {
+  const trimmed = model.trim();
+  if (trimmed.startsWith("google/")) {
+    return trimmed.slice("google/".length);
   }
   return trimmed;
 }
@@ -112,7 +135,12 @@ export function resolveModelCostConfig(params: {
     return entry.cost;
   }
 
-  if (provider.toLowerCase() !== "openrouter") {
+  const providerLower = provider.toLowerCase();
+  if (providerLower === "google") {
+    return GOOGLE_DYNAMIC_MODEL_COSTS[normalizeGoogleCostLookupModelId(model)];
+  }
+
+  if (providerLower !== "openrouter") {
     return undefined;
   }
 

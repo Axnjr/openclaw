@@ -59,6 +59,7 @@ export async function fetchHostedAgentSecret(
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "x-openclaw-gateway-token": gatewayToken,
         authorization: `Bearer ${gatewayToken}`,
       },
       body: JSON.stringify({ keys: [secretName] }),

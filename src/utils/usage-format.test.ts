@@ -65,8 +65,32 @@ describe("usage-format", () => {
     });
 
     expect(cost).toEqual({
-      input: 2,
-      output: 12,
+      input: 3,
+      output: 13,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+  });
+
+  it("resolves built-in Google pricing for known direct models", () => {
+    const direct = resolveModelCostConfig({
+      provider: "google",
+      model: "gemini-3.1-pro-preview",
+    });
+    const prefixed = resolveModelCostConfig({
+      provider: "google",
+      model: "google/gemini-3.1-pro-preview-customtools",
+    });
+
+    expect(direct).toEqual({
+      input: 3,
+      output: 13,
+      cacheRead: 0,
+      cacheWrite: 0,
+    });
+    expect(prefixed).toEqual({
+      input: 3,
+      output: 13,
       cacheRead: 0,
       cacheWrite: 0,
     });
