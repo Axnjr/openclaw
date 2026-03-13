@@ -13,6 +13,7 @@ const ALLOWED_KEYS = new Set([
   "GEMINI_API_KEY",
   "GOOGLE_API_KEY",
   "USD_PER_CREDIT",
+  "OPENCLAW_MODEL_COST_OVERRIDES_JSON",
 ]);
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {

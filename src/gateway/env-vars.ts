@@ -12,6 +12,7 @@ const MAX_BODY_BYTES = 32_768; // 32 KB
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
 }
@@ -100,9 +101,18 @@ export async function handleEnvVarRequest(
     return false;
   }
 
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.end();
+    return true;
+  }
+
   if (req.method !== "POST") {
     res.statusCode = 405;
-    res.setHeader("Allow", "POST");
+    res.setHeader("Allow", "POST, OPTIONS");
     res.end("Method Not Allowed");
     return true;
   }

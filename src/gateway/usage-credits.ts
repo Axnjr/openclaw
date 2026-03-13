@@ -3,7 +3,7 @@ import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "../agents/usage
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
 import { buildControlPlaneApiUrl } from "./control-plane-url.js";
 
-const DEFAULT_USD_PER_CREDIT = 0.01;
+const DEFAULT_USD_PER_CREDIT = 0.007;
 const CREDITS_ROUNDING_SCALE = 10_000;
 const DEFAULT_BILLING_STATUS_CACHE_TTL_MS = 3_000;
 const BILLING_CONSUME_RETRY_DELAYS_MS = [500, 1_500, 4_000] as const;
@@ -130,7 +130,7 @@ function resolveUsageCredits(usageRaw: unknown): number | undefined {
   return Math.max(0, value);
 }
 
-function resolveUsdPerCredit(env: NodeJS.ProcessEnv = process.env): number {
+export function resolveUsdPerCredit(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.USD_PER_CREDIT?.trim();
   if (!raw) {
     return DEFAULT_USD_PER_CREDIT;

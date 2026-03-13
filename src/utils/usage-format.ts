@@ -49,13 +49,13 @@ const OPENROUTER_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
   },
   "google/gemini-3.1-pro-preview-customtools": {
     input: 3,
-    output: 13,
+    output: 15,
     cacheRead: 0,
     cacheWrite: 0,
   },
   "google/gemini-3.1-pro-preview": {
     input: 3,
-    output: 13,
+    output: 15,
     cacheRead: 0,
     cacheWrite: 0,
   },
@@ -64,17 +64,22 @@ const OPENROUTER_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
 const GOOGLE_DYNAMIC_MODEL_COSTS: Record<string, ModelCostConfig> = {
   "gemini-3.1-pro-preview-customtools": {
     input: 3,
-    output: 13,
+    output: 15,
     cacheRead: 0,
     cacheWrite: 0,
   },
   "gemini-3.1-pro-preview": {
     input: 3,
-    output: 13,
+    output: 15,
     cacheRead: 0,
     cacheWrite: 0,
   },
 };
+
+const MODEL_COST_OVERRIDES_ENV = "OPENCLAW_MODEL_COST_OVERRIDES_JSON";
+
+let cachedModelCostOverridesRaw = "";
+let cachedModelCostOverrides: Record<string, ModelCostConfig> = {};
 
 function normalizeOpenRouterCostLookupModelId(model: string): string {
   const trimmed = model.trim();
@@ -90,6 +95,142 @@ function normalizeGoogleCostLookupModelId(model: string): string {
     return trimmed.slice("google/".length);
   }
   return trimmed;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asNonnegativeFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return value;
+}
+
+function parseModelCostConfigFromOverride(raw: unknown): ModelCostConfig | undefined {
+  const record = asRecord(raw);
+  if (!record) {
+    return undefined;
+  }
+  const input = asNonnegativeFiniteNumber(record.input);
+  const output = asNonnegativeFiniteNumber(record.output);
+  if (input === undefined || output === undefined) {
+    return undefined;
+  }
+  const cacheRead =
+    asNonnegativeFiniteNumber(record.cacheRead) ??
+    asNonnegativeFiniteNumber(record.cache_read) ??
+    0;
+  const cacheWrite =
+    asNonnegativeFiniteNumber(record.cacheWrite) ??
+    asNonnegativeFiniteNumber(record.cache_write) ??
+    0;
+  return { input, output, cacheRead, cacheWrite };
+}
+
+function normalizeModelCostOverrideKey(key: string): string {
+  return key.trim().toLowerCase();
+}
+
+function resolveModelCostOverrides(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, ModelCostConfig> {
+  const raw = env[MODEL_COST_OVERRIDES_ENV]?.trim() ?? "";
+  if (raw === cachedModelCostOverridesRaw) {
+    return cachedModelCostOverrides;
+  }
+
+  cachedModelCostOverridesRaw = raw;
+  cachedModelCostOverrides = {};
+  if (!raw) {
+    return cachedModelCostOverrides;
+  }
+
+  try {
+    const parsed = asRecord(JSON.parse(raw));
+    if (!parsed) {
+      return cachedModelCostOverrides;
+    }
+    const next: Record<string, ModelCostConfig> = {};
+    for (const [modelKey, value] of Object.entries(parsed)) {
+      const normalizedKey = normalizeModelCostOverrideKey(modelKey);
+      if (!normalizedKey) {
+        continue;
+      }
+      const cost = parseModelCostConfigFromOverride(value);
+      if (cost) {
+        next[normalizedKey] = cost;
+      }
+    }
+    cachedModelCostOverrides = next;
+  } catch {
+    cachedModelCostOverrides = {};
+  }
+
+  return cachedModelCostOverrides;
+}
+
+function addModelCostOverrideLookupKey(keys: Set<string>, key: string | undefined): void {
+  if (!key) {
+    return;
+  }
+  const normalized = normalizeModelCostOverrideKey(key);
+  if (normalized) {
+    keys.add(normalized);
+  }
+}
+
+function resolveModelCostOverride(params: {
+  provider: string;
+  model: string;
+  env?: NodeJS.ProcessEnv;
+}): ModelCostConfig | undefined {
+  const overrides = resolveModelCostOverrides(params.env);
+  if (Object.keys(overrides).length === 0) {
+    return undefined;
+  }
+
+  const provider = params.provider.trim().toLowerCase();
+  const model = params.model.trim();
+  const openRouterModel = normalizeOpenRouterCostLookupModelId(model);
+  const googleModel = normalizeGoogleCostLookupModelId(model);
+  const keys = new Set<string>();
+
+  addModelCostOverrideLookupKey(keys, model);
+  addModelCostOverrideLookupKey(keys, openRouterModel);
+  addModelCostOverrideLookupKey(keys, googleModel);
+  if (!model.startsWith("openrouter/")) {
+    addModelCostOverrideLookupKey(keys, `openrouter/${model}`);
+  }
+
+  if (provider === "google") {
+    addModelCostOverrideLookupKey(keys, googleModel);
+    addModelCostOverrideLookupKey(keys, `google/${googleModel}`);
+    addModelCostOverrideLookupKey(keys, `openrouter/google/${googleModel}`);
+  }
+
+  if (provider === "openrouter") {
+    addModelCostOverrideLookupKey(keys, openRouterModel);
+    addModelCostOverrideLookupKey(keys, `openrouter/${openRouterModel}`);
+    if (openRouterModel.startsWith("google/")) {
+      const googleUnprefixed = openRouterModel.slice("google/".length);
+      addModelCostOverrideLookupKey(keys, googleUnprefixed);
+      addModelCostOverrideLookupKey(keys, `google/${googleUnprefixed}`);
+      addModelCostOverrideLookupKey(keys, `openrouter/google/${googleUnprefixed}`);
+    }
+  }
+
+  for (const key of keys) {
+    const match = overrides[key];
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
 }
 
 export function formatTokenCount(value?: number): string {
@@ -119,6 +260,26 @@ export function formatUsd(value?: number): string | undefined {
   return `$${value.toFixed(4)}`;
 }
 
+function hasPositiveModelCost(cost: ModelCostConfig | undefined): boolean {
+  if (!cost) {
+    return false;
+  }
+  return cost.input > 0 || cost.output > 0 || cost.cacheRead > 0 || cost.cacheWrite > 0;
+}
+
+function resolveDynamicModelCost(
+  providerLower: string,
+  model: string,
+): ModelCostConfig | undefined {
+  if (providerLower === "google") {
+    return GOOGLE_DYNAMIC_MODEL_COSTS[normalizeGoogleCostLookupModelId(model)];
+  }
+  if (providerLower === "openrouter") {
+    return OPENROUTER_DYNAMIC_MODEL_COSTS[normalizeOpenRouterCostLookupModelId(model)];
+  }
+  return undefined;
+}
+
 export function resolveModelCostConfig(params: {
   provider?: string;
   model?: string;
@@ -129,22 +290,25 @@ export function resolveModelCostConfig(params: {
   if (!provider || !model) {
     return undefined;
   }
+  const providerLower = provider.toLowerCase();
+  const dynamicCost = resolveDynamicModelCost(providerLower, model);
+
   const providers = params.config?.models?.providers ?? {};
   const entry = providers[provider]?.models?.find((item) => item.id === model);
-  if (entry?.cost) {
+  if (entry?.cost && (hasPositiveModelCost(entry.cost) || !dynamicCost)) {
     return entry.cost;
   }
 
-  const providerLower = provider.toLowerCase();
-  if (providerLower === "google") {
-    return GOOGLE_DYNAMIC_MODEL_COSTS[normalizeGoogleCostLookupModelId(model)];
+  const envOverride = resolveModelCostOverride({ provider, model });
+  if (envOverride) {
+    return envOverride;
   }
 
-  if (providerLower !== "openrouter") {
-    return undefined;
+  if (dynamicCost) {
+    return dynamicCost;
   }
 
-  return OPENROUTER_DYNAMIC_MODEL_COSTS[normalizeOpenRouterCostLookupModelId(model)];
+  return entry?.cost;
 }
 
 const toNumber = (value: number | undefined): number =>

@@ -14,6 +14,7 @@ import { loadSessionEntry } from "./session-utils.js";
 import {
   parseGatewayCreditsUsed,
   resolveGatewayUsageWithCredits,
+  resolveUsdPerCredit,
   roundGatewayCredits,
   withUsageCredits,
   consumeBillingCredits,
@@ -120,7 +121,8 @@ function resolveTerminalUsageSnapshot(data: unknown): TerminalUsageSnapshot {
   });
   const costUsd =
     asFiniteNumber(record?.costUsd) ?? asFiniteNumber(record?.cost_usd) ?? usageSummary.costUsd;
-  const creditsFromCost = costUsd !== undefined ? roundGatewayCredits(costUsd / 0.01) : undefined;
+  const creditsFromCost =
+    costUsd !== undefined ? roundGatewayCredits(costUsd / resolveUsdPerCredit()) : undefined;
   const explicitCredits =
     parseGatewayCreditsUsed(record?.creditsUsed) ?? parseGatewayCreditsUsed(record?.credits_used);
   const source =
