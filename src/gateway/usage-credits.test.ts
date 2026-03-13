@@ -26,13 +26,13 @@ describe("gateway/usage-credits", () => {
     });
 
     expect(result.costUsd).toBeCloseTo(0.0009);
-    expect(result.creditsUsed).toBeCloseTo(0.09);
+    expect(result.creditsUsed).toBeCloseTo(0.1286);
     expect(result.usage).toMatchObject({
       input: 1000,
       output: 500,
       total: 1500,
-      creditsUsed: 0.09,
-      credits_used: 0.09,
+      creditsUsed: 0.1286,
+      credits_used: 0.1286,
       cost: {
         total: 0.0009,
         totalUsd: 0.0009,
@@ -54,13 +54,13 @@ describe("gateway/usage-credits", () => {
     });
 
     expect(result.costUsd).toBeCloseTo(0.011);
-    expect(result.creditsUsed).toBeCloseTo(1.1);
+    expect(result.creditsUsed).toBeCloseTo(1.5714);
     expect(result.usage).toMatchObject({
       input: 1000,
       output: 500,
       total: 1500,
-      creditsUsed: 1.1,
-      credits_used: 1.1,
+      creditsUsed: 1.5714,
+      credits_used: 1.5714,
       cost: {
         total: 0.011,
         totalUsd: 0.011,
@@ -111,7 +111,7 @@ describe("gateway/usage-credits", () => {
       });
 
       expect(result.costUsd).toBeCloseTo(0.011);
-      expect(result.creditsUsed).toBeCloseTo(1.1);
+      expect(result.creditsUsed).toBeCloseTo(1.5714);
     } finally {
       if (previous === undefined) {
         delete process.env.USD_PER_CREDIT;
