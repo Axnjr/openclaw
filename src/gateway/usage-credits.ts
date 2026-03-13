@@ -3,7 +3,7 @@ import { hasNonzeroUsage, normalizeUsage, type UsageLike } from "../agents/usage
 import { estimateUsageCost, resolveModelCostConfig } from "../utils/usage-format.js";
 import { buildControlPlaneApiUrl } from "./control-plane-url.js";
 
-const DEFAULT_USD_PER_CREDIT = 0.007;
+const DEFAULT_USD_PER_CREDIT = 0.005;
 const CREDITS_ROUNDING_SCALE = 10_000;
 const DEFAULT_BILLING_STATUS_CACHE_TTL_MS = 3_000;
 const BILLING_CONSUME_RETRY_DELAYS_MS = [500, 1_500, 4_000] as const;
